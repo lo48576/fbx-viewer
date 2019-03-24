@@ -1,0 +1,20 @@
+[package]
+name = "fbx-viewer"
+version = "0.1.0"
+authors = ["YOSHIOKA Takuma <lo48576@hard-wi.red>"]
+edition = "2018"
+
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+description = "FBX viewer"
+repository = "https://github.com/lo48576/fbx-viewer"
+keywords = ["FBX", "3D"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+
+[badges]
+maintenance = { status = "experimental" }
+travis-ci = { repository = "lo48576/fbx-viewer" }

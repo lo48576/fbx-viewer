@@ -1,0 +1,3 @@
+//! FBX viewer.
+
+fn main() {}
