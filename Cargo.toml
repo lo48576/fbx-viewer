@@ -16,6 +16,7 @@ all-features = true
 [dependencies]
 env_logger = "0.6"
 failure = "0.1.5"
+fbxcel-dom = "0.0.1"
 log = "0.4"
 vulkano = "0.11"
 
