@@ -2,7 +2,9 @@
 
 use std::env;
 
+use fbx_viewer::CliOpt;
 use log::info;
+use structopt::StructOpt;
 
 pub mod vulkan;
 
@@ -10,7 +12,8 @@ fn main() {
     setup_logger();
     info!("version: {}", env!("CARGO_PKG_VERSION"));
 
-    vulkan::main().expect("Vulkan mode failed");
+    let opt = CliOpt::from_args();
+    vulkan::main(opt).expect("Vulkan mode failed");
 }
 
 fn setup_logger() {
