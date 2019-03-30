@@ -5,4 +5,6 @@
 pub use self::cli_opt::CliOpt;
 
 mod cli_opt;
+pub mod data;
+pub mod drawable;
 pub mod fbx;
