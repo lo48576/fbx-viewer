@@ -1,10 +1,6 @@
-# __foobar
+# fbx-viewer
 
-[![Build Status](https://travis-ci.org/lo48576/__foobar.svg?branch=develop)](https://travis-ci.org/lo48576/__foobar)
-<!--
-[![Latest version](https://img.shields.io/crates/v/__foobar.svg)](https://crates.io/crates/__foobar)
-[![Documentation](https://docs.rs/__foobar/badge.svg)](https://docs.rs/__foobar)
--->
+[![Build Status](https://travis-ci.org/lo48576/fbx-viewer.svg?branch=develop)](https://travis-ci.org/lo48576/fbx-viewer)
 
 
 ## License
