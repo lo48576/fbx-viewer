@@ -59,17 +59,18 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
             let polygon_vertex_indices = geometry.polygon_vertex_indices()?;
             let triangle_pvi_indices =
                 polygon_vertex_indices.triangulate_each(&control_points, triangulator)?;
-            let vertices = control_points
-                .iter_f32()
-                .map(|position| Vertex { position })
-                .collect::<Vec<_>>();
-            let indices = triangle_pvi_indices
+            let vertices = triangle_pvi_indices
                 .iter_control_point_indices()
-                .map(|i| {
-                    i.map(|i| i.get_u32())
-                        .ok_or_else(|| format_err!("Corrupted mesh data"))
+                .map(|cpi| {
+                    let cpi =
+                        cpi.ok_or_else(|| format_err!("Failed to get control point index"))?;
+                    control_points
+                        .get_cp_f32(cpi)
+                        .map(|position| Vertex { position })
+                        .ok_or_else(|| format_err!("Failed to get control point"))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            let indices = (0..triangle_pvi_indices.len() as u32).collect::<Vec<_>>();
             Mesh {
                 name: mesh_obj.name().map(Into::into),
                 position: vertices,
