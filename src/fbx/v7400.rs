@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use failure::{format_err, Fallible};
 use fbxcel_dom::v7400::{
+    data::mesh::layer::TypedLayerElementHandle,
     object::{
         model::{self, TypedModelHandle},
         ObjectId, TypedObjectHandle,
@@ -59,21 +60,44 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
             let polygon_vertex_indices = geometry.polygon_vertex_indices()?;
             let triangle_pvi_indices =
                 polygon_vertex_indices.triangulate_each(&control_points, triangulator)?;
-            let vertices = triangle_pvi_indices
+            let positions = triangle_pvi_indices
                 .iter_control_point_indices()
                 .map(|cpi| {
                     let cpi =
                         cpi.ok_or_else(|| format_err!("Failed to get control point index"))?;
                     control_points
                         .get_cp_f32(cpi)
-                        .map(|position| Vertex { position })
                         .ok_or_else(|| format_err!("Failed to get control point"))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            let layer = geometry
+                .layers()
+                .next()
+                .ok_or_else(|| format_err!("Failed to get layer"))?;
+            let normals = {
+                let normals = layer
+                    .layer_element_entries()
+                    .filter_map(|entry| match entry.typed_layer_element() {
+                        Ok(TypedLayerElementHandle::Normal(handle)) => Some(handle),
+                        _ => None,
+                    })
+                    .next()
+                    .ok_or_else(|| format_err!("Failed to get normals"))?
+                    .normals()?;
+                triangle_pvi_indices
+                    .triangle_vertex_indices()
+                    .map(|tri_vi| normals.get_xyz_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+            let vertices = positions
+                .into_iter()
+                .zip(normals)
+                .map(|(position, normal)| Vertex { position, normal })
+                .collect();
             let indices = (0..triangle_pvi_indices.len() as u32).collect::<Vec<_>>();
             Mesh {
                 name: mesh_obj.name().map(Into::into),
-                position: vertices,
+                vertices,
                 indices,
             }
         };

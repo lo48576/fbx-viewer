@@ -154,7 +154,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                     builder = builder.draw_indexed(
                         pipeline.clone(),
                         &DynamicState::none(),
-                        vec![mesh.position().clone()],
+                        vec![mesh.vertex().clone()],
                         mesh.index().clone(),
                         set.clone(),
                         (),

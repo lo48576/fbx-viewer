@@ -17,7 +17,7 @@ all-features = true
 cgmath = "0.17"
 env_logger = "0.6"
 failure = "0.1.5"
-fbxcel-dom = { git = "https://github.com/lo48576/fbxcel-dom.git", rev = "07f0c14b17e1" }
+fbxcel-dom = { git = "https://github.com/lo48576/fbxcel-dom.git", rev = "350320d2f035" }
 log = "0.4"
 structopt = "0.2"
 vulkano = "0.11"
