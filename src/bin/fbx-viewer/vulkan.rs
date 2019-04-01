@@ -151,14 +151,16 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                     )?;
             for model in drawable_scene.iter_models() {
                 for mesh in model.iter_meshes() {
-                    builder = builder.draw_indexed(
-                        pipeline.clone(),
-                        &DynamicState::none(),
-                        vec![mesh.vertex().clone()],
-                        mesh.index().clone(),
-                        set.clone(),
-                        (),
-                    )?
+                    for index in mesh.indices() {
+                        builder = builder.draw_indexed(
+                            pipeline.clone(),
+                            &DynamicState::none(),
+                            vec![mesh.vertex().clone()],
+                            index.clone(),
+                            set.clone(),
+                            (),
+                        )?;
+                    }
                 }
             }
             builder.end_render_pass()?.build()?

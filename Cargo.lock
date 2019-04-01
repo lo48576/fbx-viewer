@@ -322,7 +322,7 @@ dependencies = [
  "cgmath 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "fbxcel-dom 0.0.2 (git+https://github.com/lo48576/fbxcel-dom.git?rev=350320d2f035)",
+ "fbxcel-dom 0.0.2 (git+https://github.com/lo48576/fbxcel-dom.git?rev=dd33f14ef49a)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt 0.2.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "vulkano 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -346,7 +346,7 @@ dependencies = [
 [[package]]
 name = "fbxcel-dom"
 version = "0.0.2"
-source = "git+https://github.com/lo48576/fbxcel-dom.git?rev=350320d2f035#350320d2f0350efdd820052a5feab1798adaca4d"
+source = "git+https://github.com/lo48576/fbxcel-dom.git?rev=dd33f14ef49a#dd33f14ef49a81fa5e996786266ed0a07f678f4f"
 dependencies = [
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "fbxcel 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1268,7 +1268,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "795bd83d3abeb9220f257e597aa0080a508b27533824adf336529648f6abf7e2"
 "checksum failure_derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "ea1063915fd7ef4309e222a5a07cf9c319fb9c7836b1f89b85458672dbb127e1"
 "checksum fbxcel 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "82539f5961e31804afca28666ea8070c50698681d9a27854b237882d5851902a"
-"checksum fbxcel-dom 0.0.2 (git+https://github.com/lo48576/fbxcel-dom.git?rev=350320d2f035)" = "<none>"
+"checksum fbxcel-dom 0.0.2 (git+https://github.com/lo48576/fbxcel-dom.git?rev=dd33f14ef49a)" = "<none>"
 "checksum fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "2fad85553e09a6f881f739c29f0b00b0f01357c743266d478b68951ce23285f3"
 "checksum foreign-types 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
 "checksum foreign-types-shared 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"

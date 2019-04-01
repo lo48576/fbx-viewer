@@ -1,6 +1,6 @@
 //! FBX v7400 support.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use failure::{format_err, Fallible};
 use fbxcel_dom::v7400::{
@@ -89,12 +89,42 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                     .map(|tri_vi| normals.get_xyz_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
                     .collect::<Result<Vec<_>, _>>()?
             };
+            let material_indices = {
+                let materials = layer
+                    .layer_element_entries()
+                    .filter_map(|entry| match entry.typed_layer_element() {
+                        Ok(TypedLayerElementHandle::Material(handle)) => Some(handle),
+                        _ => None,
+                    })
+                    .next()
+                    .ok_or_else(|| format_err!("Failed to get materials"))?
+                    .materials()?;
+                triangle_pvi_indices
+                    .triangle_vertex_indices()
+                    .map(|tri_vi| {
+                        materials.get_material_index_by_tri_vi(&triangle_pvi_indices, tri_vi)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+            };
             let vertices = positions
                 .into_iter()
                 .zip(normals)
-                .map(|(position, normal)| Vertex { position, normal })
+                .zip(material_indices.iter().map(|i| i.get_u32()))
+                .map(|((position, normal), material)| Vertex {
+                    position,
+                    normal,
+                    material,
+                })
                 .collect();
-            let indices = (0..triangle_pvi_indices.len() as u32).collect::<Vec<_>>();
+            let mut indices = BTreeMap::new();
+            assert_eq!(triangle_pvi_indices.len(), material_indices.len());
+            for (pvii, &material_i) in material_indices.iter().enumerate() {
+                indices
+                    .entry(material_i)
+                    .or_insert_with(Vec::new)
+                    .push(pvii as u32);
+            }
+            let indices = indices.into_iter().map(|(_, v)| v).collect();
             Mesh {
                 name: mesh_obj.name().map(Into::into),
                 vertices,

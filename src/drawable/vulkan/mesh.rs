@@ -17,8 +17,8 @@ pub struct Mesh {
     name: Option<String>,
     /// Vertex buffer.
     vertex: Arc<CpuAccessibleBuffer<[Vertex]>>,
-    /// Index.
-    index: Arc<CpuAccessibleBuffer<[u32]>>,
+    /// Index buffers.
+    indices: Vec<Arc<CpuAccessibleBuffer<[u32]>>>,
 }
 
 impl Mesh {
@@ -29,16 +29,23 @@ impl Mesh {
             BufferUsage::all(),
             mesh.vertices.iter().cloned(),
         )?;
-        let index = CpuAccessibleBuffer::from_iter(
-            device.clone(),
-            BufferUsage::all(),
-            mesh.indices.iter().cloned(),
-        )?;
+        let indices = mesh
+            .indices
+            .iter()
+            .map(|indices| {
+                CpuAccessibleBuffer::from_iter(
+                    device.clone(),
+                    BufferUsage::all(),
+                    indices.iter().cloned(),
+                )
+                .map_err(Into::into)
+            })
+            .collect::<Fallible<_>>()?;
 
         Ok(Self {
             name: mesh.name.clone(),
             vertex,
-            index,
+            indices,
         })
     }
 
@@ -53,7 +60,7 @@ impl Mesh {
     }
 
     /// Returns the index buffer.
-    pub fn index(&self) -> &Arc<CpuAccessibleBuffer<[u32]>> {
-        &self.index
+    pub fn indices(&self) -> &[Arc<CpuAccessibleBuffer<[u32]>>] {
+        &self.indices
     }
 }
