@@ -33,6 +33,8 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
 
     let mut models = HashMap::<ObjectId, (Option<String>, Vec<Mesh>)>::new();
 
+    // Load meshes.
+    // TODO: support instantiation (geometry sharing among different models).
     for (_mesh_id, mesh_obj) in mesh_objs {
         debug!(
             "Loading mesh: name={:?}, object_id={:?}",
