@@ -16,29 +16,36 @@ pub struct Mesh {
     /// Name.
     name: Option<String>,
     /// Vertex buffer.
-    position: Arc<CpuAccessibleBuffer<[Vertex]>>,
-    /// Index.
-    index: Arc<CpuAccessibleBuffer<[u32]>>,
+    vertex: Arc<CpuAccessibleBuffer<[Vertex]>>,
+    /// Index buffers.
+    indices: Vec<Arc<CpuAccessibleBuffer<[u32]>>>,
 }
 
 impl Mesh {
     /// Creates a new `Mesh` from the given mesh.
     pub fn from_mesh(device: &Arc<Device>, mesh: &crate::data::Mesh) -> Fallible<Self> {
-        let position = CpuAccessibleBuffer::from_iter(
+        let vertex = CpuAccessibleBuffer::from_iter(
             device.clone(),
             BufferUsage::all(),
-            mesh.position.iter().cloned(),
+            mesh.vertices.iter().cloned(),
         )?;
-        let index = CpuAccessibleBuffer::from_iter(
-            device.clone(),
-            BufferUsage::all(),
-            mesh.indices.iter().cloned(),
-        )?;
+        let indices = mesh
+            .indices
+            .iter()
+            .map(|indices| {
+                CpuAccessibleBuffer::from_iter(
+                    device.clone(),
+                    BufferUsage::all(),
+                    indices.iter().cloned(),
+                )
+                .map_err(Into::into)
+            })
+            .collect::<Fallible<_>>()?;
 
         Ok(Self {
             name: mesh.name.clone(),
-            position,
-            index,
+            vertex,
+            indices,
         })
     }
 
@@ -48,12 +55,12 @@ impl Mesh {
     }
 
     /// Returns the vertex buffer.
-    pub fn position(&self) -> &Arc<CpuAccessibleBuffer<[Vertex]>> {
-        &self.position
+    pub fn vertex(&self) -> &Arc<CpuAccessibleBuffer<[Vertex]>> {
+        &self.vertex
     }
 
     /// Returns the index buffer.
-    pub fn index(&self) -> &Arc<CpuAccessibleBuffer<[u32]>> {
-        &self.index
+    pub fn indices(&self) -> &[Arc<CpuAccessibleBuffer<[u32]>>] {
+        &self.indices
     }
 }
