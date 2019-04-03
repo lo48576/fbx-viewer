@@ -13,7 +13,7 @@ use fbxcel_dom::v7400::{
 };
 use log::debug;
 
-use crate::data::{mesh::Vertex, Mesh, Model, Scene};
+use crate::data::{mesh::Vertex, Mesh, Model, Scene, SubMesh};
 
 use self::triangulator::triangulator;
 
@@ -118,19 +118,25 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                     material,
                 })
                 .collect();
-            let mut indices = BTreeMap::new();
+            let mut submeshes = BTreeMap::new();
             assert_eq!(triangle_pvi_indices.len(), material_indices.len());
             for (pvii, &material_i) in material_indices.iter().enumerate() {
-                indices
+                submeshes
                     .entry(material_i)
                     .or_insert_with(Vec::new)
                     .push(pvii as u32);
             }
-            let indices = indices.into_iter().map(|(_, v)| v).collect();
+            let submeshes = submeshes
+                .into_iter()
+                .map(|(material_index, indices)| SubMesh {
+                    material_index: material_index.get_u32(),
+                    indices,
+                })
+                .collect();
             Mesh {
                 name: mesh_obj.name().map(Into::into),
                 vertices,
-                indices,
+                submeshes,
             }
         };
 
