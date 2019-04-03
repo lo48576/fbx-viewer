@@ -91,6 +91,21 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                     .map(|tri_vi| normals.get_xyz_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
                     .collect::<Result<Vec<_>, _>>()?
             };
+            let uv = {
+                let uv = layer
+                    .layer_element_entries()
+                    .filter_map(|entry| match entry.typed_layer_element() {
+                        Ok(TypedLayerElementHandle::Uv(handle)) => Some(handle),
+                        _ => None,
+                    })
+                    .next()
+                    .ok_or_else(|| format_err!("Failed to get UV"))?
+                    .uv()?;
+                triangle_pvi_indices
+                    .triangle_vertex_indices()
+                    .map(|tri_vi| uv.get_uv_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
+                    .collect::<Result<Vec<_>, _>>()?
+            };
             let material_indices = {
                 let materials = layer
                     .layer_element_entries()
@@ -111,10 +126,12 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
             let vertices = positions
                 .into_iter()
                 .zip(normals)
+                .zip(uv)
                 .zip(material_indices.iter().map(|i| i.get_u32()))
-                .map(|((position, normal), material)| Vertex {
+                .map(|(((position, normal), uv), material)| Vertex {
                     position,
                     normal,
+                    uv,
                     material,
                 })
                 .collect();

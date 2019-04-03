@@ -27,8 +27,10 @@ pub struct Vertex {
     pub position: [f32; 3],
     /// Normal.
     pub normal: [f32; 3],
+    /// UV.
+    pub uv: [f32; 2],
     /// Material.
     pub material: u32,
 }
 
-vulkano::impl_vertex!(Vertex, position, normal, material);
+vulkano::impl_vertex!(Vertex, position, normal, uv, material);
