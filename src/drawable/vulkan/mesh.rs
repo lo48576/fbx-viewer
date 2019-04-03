@@ -17,8 +17,8 @@ pub struct Mesh {
     name: Option<String>,
     /// Vertex buffer.
     vertex: Arc<CpuAccessibleBuffer<[Vertex]>>,
-    /// Index buffers.
-    indices: Vec<Arc<CpuAccessibleBuffer<[u32]>>>,
+    /// Submeshes.
+    submeshes: Vec<SubMesh>,
 }
 
 impl Mesh {
@@ -29,23 +29,16 @@ impl Mesh {
             BufferUsage::all(),
             mesh.vertices.iter().cloned(),
         )?;
-        let indices = mesh
-            .indices
+        let submeshes = mesh
+            .submeshes
             .iter()
-            .map(|indices| {
-                CpuAccessibleBuffer::from_iter(
-                    device.clone(),
-                    BufferUsage::all(),
-                    indices.iter().cloned(),
-                )
-                .map_err(Into::into)
-            })
+            .map(|submesh| SubMesh::from_submesh(device, submesh))
             .collect::<Fallible<_>>()?;
 
         Ok(Self {
             name: mesh.name.clone(),
             vertex,
-            indices,
+            submeshes,
         })
     }
 
@@ -59,8 +52,43 @@ impl Mesh {
         &self.vertex
     }
 
+    /// Returns the submeshes.
+    pub fn submeshes(&self) -> &[SubMesh] {
+        &self.submeshes
+    }
+}
+
+/// Drawable submesh.
+#[derive(Debug, Clone)]
+pub struct SubMesh {
+    /// Material index.
+    material_index: u32,
+    /// Index buffer.
+    indices: Arc<CpuAccessibleBuffer<[u32]>>,
+}
+
+impl SubMesh {
+    /// Creates a new `SubMesh` from the given submesh.
+    pub fn from_submesh(device: &Arc<Device>, submesh: &crate::data::SubMesh) -> Fallible<Self> {
+        let indices = CpuAccessibleBuffer::from_iter(
+            device.clone(),
+            BufferUsage::all(),
+            submesh.indices.iter().cloned(),
+        )?;
+
+        Ok(SubMesh {
+            material_index: submesh.material_index,
+            indices,
+        })
+    }
+
+    /// Returns the material index.
+    pub fn material_index(&self) -> u32 {
+        self.material_index
+    }
+
     /// Returns the index buffer.
-    pub fn indices(&self) -> &[Arc<CpuAccessibleBuffer<[u32]>>] {
+    pub fn index(&self) -> &Arc<CpuAccessibleBuffer<[u32]>> {
         &self.indices
     }
 }

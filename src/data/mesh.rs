@@ -7,8 +7,17 @@ pub struct Mesh {
     pub name: Option<String>,
     /// Vertices.
     pub vertices: Vec<Vertex>,
+    /// Submeshes.
+    pub submeshes: Vec<SubMesh>,
+}
+
+/// Sub mesh.
+#[derive(Debug, Clone)]
+pub struct SubMesh {
+    /// Material index.
+    pub material_index: u32,
     /// Indices.
-    pub indices: Vec<Vec<u32>>,
+    pub indices: Vec<u32>,
 }
 
 /// Vertex.
