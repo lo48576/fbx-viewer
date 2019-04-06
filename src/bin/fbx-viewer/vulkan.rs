@@ -27,6 +27,9 @@ use self::setup::{create_swapchain, setup};
 
 mod setup;
 
+/// Depth format.
+const DEPTH_FORMAT: Format = Format::D32Sfloat;
+
 pub fn main(opt: CliOpt) -> Fallible<()> {
     info!("Vulkan mode");
 
@@ -55,7 +58,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                 depth: {
                     load: Clear,
                     store: DontCare,
-                    format: Format::D16Unorm,
+                    format: DEPTH_FORMAT,
                     samples: 1,
                 }
             },
@@ -243,7 +246,7 @@ fn window_size_dependent_setup(
     Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
 )> {
     let dimensions = images[0].dimensions();
-    let depth_buffer = AttachmentImage::transient(device.clone(), dimensions, Format::D16Unorm)?;
+    let depth_buffer = AttachmentImage::transient(device.clone(), dimensions, DEPTH_FORMAT)?;
 
     let framebuffers = images
         .iter()
