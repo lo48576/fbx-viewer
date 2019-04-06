@@ -20,7 +20,7 @@ pub fn setup() -> Fallible<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>, Event
     let instance = {
         let extensions = vulkano_win::required_extensions();
         Instance::new(None, &extensions, None)
-            .with_context(|e| format!("Failed to create vulkan instance: {}", e))?
+            .with_context(|e| format_err!("Failed to create vulkan instance: {}", e))?
     };
     debug!("Successfully created vulkan instance: {:?}", instance);
 
@@ -94,7 +94,7 @@ pub fn setup() -> Fallible<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>, Event
             &device_ext,
             [(queue_family, QUEUE_PRIORITY)].iter().cloned(),
         )
-        .with_context(|e| format!("Failed to create device: {}", e))?;
+        .with_context(|e| format_err!("Failed to create device: {}", e))?;
         (device, queues.next().expect("Should never fail"))
     };
     info!("Successfully created device object");
@@ -112,13 +112,16 @@ pub fn create_swapchain(
     let caps = surface
         .capabilities(device.physical_device())
         .with_context(|e| format_err!("Failed to get surface capabilities: {}", e))?;
+    debug!("Capabilities: {:?}", caps);
     let usage = caps.supported_usage_flags;
     let alpha = caps
         .supported_composite_alpha
         .iter()
         .next()
-        .ok_or_else(|| format_err!("No composite alpha modes are supported"))?;
+        .ok_or_else(|| format_err!("No desired composite alpha modes are supported"))?;
+    info!("Selected alpha composite mode: {:?}", alpha);
     let format = caps.supported_formats[0].0;
+    info!("Selected swapchain format: {:?}", format);
 
     let window = surface.window();
     let initial_dimensions = window

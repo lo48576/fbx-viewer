@@ -5,7 +5,7 @@ use std::sync::Arc;
 use cgmath::{Matrix3, Matrix4, Point3, Rad, Vector3};
 use failure::{bail, format_err, Fallible, ResultExt};
 use fbx_viewer::{fbx, CliOpt};
-use log::{error, info};
+use log::{error, info, trace};
 use vulkano::{
     buffer::{BufferUsage, CpuBufferPool},
     command_buffer::{AutoCommandBufferBuilder, DynamicState},
@@ -33,17 +33,20 @@ const DEPTH_FORMAT: Format = Format::D32Sfloat;
 pub fn main(opt: CliOpt) -> Fallible<()> {
     info!("Vulkan mode");
 
-    let (device, queue, surface, mut events_loop) = setup()?;
+    let (device, queue, surface, mut events_loop) =
+        setup().with_context(|e| format_err!("Failed to setup vulkan: {}", e))?;
     let window = surface.window();
-    let mut dimensions = window_dimensions(&window)?;
-    let (mut swapchain, images) = create_swapchain(&device, &queue, &surface)?;
+    let mut dimensions = window_dimensions(&window)
+        .with_context(|e| format_err!("Failed to get window dimensions: {}", e))?;
+    let (mut swapchain, images) = create_swapchain(&device, &queue, &surface)
+        .with_context(|e| format_err!("Failed to create swapchain: {}", e))?;
 
     let uniform_buffer = CpuBufferPool::<vs::ty::Data>::new(device.clone(), BufferUsage::all());
 
     let vs = vs::Shader::load(device.clone())
         .with_context(|e| format_err!("Failed to load vertex shader: {}", e))?;
     let fs = fs::Shader::load(device.clone())
-        .with_context(|e| format_err!("Failed to load vertex shader: {}", e))?;
+        .with_context(|e| format_err!("Failed to load fragment shader: {}", e))?;
 
     let render_pass = Arc::new(
         vulkano::single_pass_renderpass!(
@@ -71,13 +74,16 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
     );
 
     let (mut pipeline, mut framebuffers) =
-        window_size_dependent_setup(device.clone(), &vs, &fs, &images, render_pass.clone())?;
+        window_size_dependent_setup(device.clone(), &vs, &fs, &images, render_pass.clone())
+            .with_context(|e| format_err!("Failed to set up pipeline and framebuffers: {}", e))?;
     let mut recreate_swapchain = false;
 
-    let scene = fbx::load(&opt.fbx_path)?;
+    let scene = fbx::load(&opt.fbx_path)
+        .with_context(|e| format_err!("Failed to interpret FBX scene: {}", e))?;
     let (drawable_scene, scene_load_future_opt) =
         fbx_viewer::drawable::vulkan::Loader::new(device.clone(), queue.clone(), pipeline.clone())
-            .load(&scene)?;
+            .load(&scene)
+            .with_context(|e| format_err!("Failed to load FBX scene to GPU: {}", e))?;
 
     let mut previous_frame =
         scene_load_future_opt.unwrap_or_else(|| Box::new(vulkano::sync::now(device.clone())));
@@ -89,7 +95,9 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
     'main: loop {
         previous_frame.cleanup_finished();
         if recreate_swapchain {
-            dimensions = window_dimensions(&window)?;
+            trace!("Recreating swapchain");
+            dimensions = window_dimensions(&window)
+                .with_context(|e| format_err!("Failed to get window dimensions: {}", e))?;
 
             let (new_swapchain, new_images) = match swapchain.recreate_with_dimension(dimensions) {
                 Ok(r) => r,
@@ -104,10 +112,12 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                 &fs,
                 &new_images,
                 render_pass.clone(),
-            )?;
+            )
+            .with_context(|e| format_err!("Failed to set up pipeline and framebuffers: {}", e))?;
             pipeline = new_pipeline;
             framebuffers = new_framebuffers;
 
+            trace!("Swapchain recreation done");
             recreate_swapchain = false;
         }
 
@@ -132,13 +142,19 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                 proj: proj.into(),
             };
 
-            uniform_buffer.next(uniform_data)?
+            uniform_buffer
+                .next(uniform_data)
+                .with_context(|e| format_err!("Failed to put data into uniform buffer: {}", e))?
         };
 
         let set0 = Arc::new(
             PersistentDescriptorSet::start(pipeline.clone(), 0)
-                .add_buffer(uniform_buffer_subbuffer)?
-                .build()?,
+                .add_buffer(uniform_buffer_subbuffer)
+                .with_context(|e| {
+                    format_err!("Failed to add uniform buffer to descriptor set: {}", e)
+                })?
+                .build()
+                .with_context(|e| format_err!("Failed to build descriptor set: {}", e))?,
         );
         let (image_num, acquire_future) =
             match vulkano::swapchain::acquire_next_image(swapchain.clone(), None) {
@@ -150,50 +166,64 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                 Err(e) => bail!("`acquire_next_image()` failed: {}", e),
             };
 
-        let command_buffer = {
-            let mut builder =
-                AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family())?
-                    .begin_render_pass(
-                        framebuffers[image_num].clone(),
-                        false,
-                        vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()],
-                    )?;
-            let mut opaque_submeshes = Vec::new();
-            let mut transparent_submeshes = Vec::new();
-            for model in drawable_scene.iter_models() {
-                for mesh in model.iter_meshes() {
-                    for submesh in mesh.submeshes() {
-                        if let Some(texture) = submesh.texture() {
-                            if texture.is_transparent() {
-                                transparent_submeshes.push((mesh, submesh, texture));
+        let command_buffer =
+            {
+                let mut builder = AutoCommandBufferBuilder::primary_one_time_submit(
+                    device.clone(),
+                    queue.family(),
+                )
+                .with_context(|e| format_err!("Failed to create command buffer builder: {}", e))?
+                .begin_render_pass(
+                    framebuffers[image_num].clone(),
+                    false,
+                    vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()],
+                )
+                .with_context(|e| format_err!("Failed to begin new render pass creation: {}", e))?;
+                let mut opaque_submeshes = Vec::new();
+                let mut transparent_submeshes = Vec::new();
+                for model in drawable_scene.iter_models() {
+                    for mesh in model.iter_meshes() {
+                        for submesh in mesh.submeshes() {
+                            if let Some(texture) = submesh.texture() {
+                                if texture.is_transparent() {
+                                    transparent_submeshes.push((mesh, submesh, texture));
+                                } else {
+                                    opaque_submeshes.push((mesh, submesh, texture));
+                                }
                             } else {
-                                opaque_submeshes.push((mesh, submesh, texture));
+                                // TODO: Support submesh without texture.
                             }
-                        } else {
-                            // TODO: Support submesh without texture.
                         }
                     }
                 }
-            }
-            // Draw opaque meshes first, then transparent ones.
-            for (mesh, submesh, texture) in
-                opaque_submeshes.into_iter().chain(transparent_submeshes)
-            {
-                builder = builder.draw_indexed(
-                    pipeline.clone(),
-                    &DynamicState::none(),
-                    vec![mesh.vertex().clone()],
-                    submesh.index().clone(),
-                    (set0.clone(), texture.descriptor_set().clone()),
-                    (),
-                )?;
-            }
-            builder.end_render_pass()?.build()?
-        };
+                // Draw opaque meshes first, then transparent ones.
+                for (mesh, submesh, texture) in
+                    opaque_submeshes.into_iter().chain(transparent_submeshes)
+                {
+                    builder = builder
+                        .draw_indexed(
+                            pipeline.clone(),
+                            &DynamicState::none(),
+                            vec![mesh.vertex().clone()],
+                            submesh.index().clone(),
+                            (set0.clone(), texture.descriptor_set().clone()),
+                            (),
+                        )
+                        .with_context(|e| {
+                            format_err!("Failed to add a draw call to command buffer: {}", e)
+                        })?;
+                }
+                builder
+                    .end_render_pass()
+                    .with_context(|e| format_err!("Failed to end a render pass creation: {}", e))?
+                    .build()
+                    .with_context(|e| format_err!("Failed to build a new command buffer: {}", e))?
+            };
 
         let future = previous_frame
             .join(acquire_future)
-            .then_execute(queue.clone(), command_buffer)?
+            .then_execute(queue.clone(), command_buffer)
+            .with_context(|e| format_err!("Failed to execute command buffer: {}", e))?
             .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
             .then_signal_fence_and_flush();
         match future {
@@ -246,20 +276,28 @@ fn window_size_dependent_setup(
     Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
 )> {
     let dimensions = images[0].dimensions();
-    let depth_buffer = AttachmentImage::transient(device.clone(), dimensions, DEPTH_FORMAT)?;
+    let depth_buffer = AttachmentImage::transient(device.clone(), dimensions, DEPTH_FORMAT)
+        .with_context(|e| format_err!("Failed to create depth buffer: {}", e))?;
 
     let framebuffers = images
         .iter()
         .map(|image| {
             Framebuffer::start(render_pass.clone())
-                .add(image.clone())?
-                .add(depth_buffer.clone())?
+                .add(image.clone())
+                .with_context(|e| {
+                    format_err!("Failed to add a swapchain image to framebuffer: {}", e)
+                })?
+                .add(depth_buffer.clone())
+                .with_context(|e| {
+                    format_err!("Failed to add a depth buffer to framebuffer: {}", e)
+                })?
                 .build()
                 .map(|fb| Arc::new(fb) as Arc<dyn FramebufferAbstract + Send + Sync>)
                 .with_context(|e| format_err!("Failed to create framebuffer: {}", e))
                 .map_err(Into::into)
         })
-        .collect::<Fallible<Vec<_>>>()?;
+        .collect::<Fallible<Vec<_>>>()
+        .with_context(|e| format_err!("Failed to create framebuffers: {}", e))?;
 
     let pipeline = GraphicsPipeline::start()
         .vertex_input(SingleBufferDefinition::<fbx_viewer::data::mesh::Vertex>::new())
@@ -279,7 +317,8 @@ fn window_size_dependent_setup(
                 .ok_or_else(|| format_err!("Failed to create subpass"))?,
         )
         .build(device.clone())
-        .map(Arc::new)?;
+        .map(Arc::new)
+        .with_context(|e| format_err!("Failed to create pipeline: {}", e))?;
 
     Ok((pipeline, framebuffers))
 }
