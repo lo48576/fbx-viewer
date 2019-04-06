@@ -1,9 +1,15 @@
 //! Drawable stuff for vulkan.
 
-pub use self::mesh::Mesh;
-pub use self::model::Model;
-pub use self::scene::Scene;
+pub use self::{
+    loader::Loader,
+    mesh::{Mesh, SubMesh},
+    model::Model,
+    scene::Scene,
+    texture::Texture,
+};
 
+pub(crate) mod loader;
 mod mesh;
 mod model;
 mod scene;
+mod texture;

@@ -27,6 +27,9 @@ use self::setup::{create_swapchain, setup};
 
 mod setup;
 
+/// Depth format.
+const DEPTH_FORMAT: Format = Format::D32Sfloat;
+
 pub fn main(opt: CliOpt) -> Fallible<()> {
     info!("Vulkan mode");
 
@@ -35,9 +38,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
     let mut dimensions = window_dimensions(&window)?;
     let (mut swapchain, images) = create_swapchain(&device, &queue, &surface)?;
 
-    let scene = fbx::load(&opt.fbx_path)?;
     let uniform_buffer = CpuBufferPool::<vs::ty::Data>::new(device.clone(), BufferUsage::all());
-    let drawable_scene = fbx_viewer::drawable::vulkan::Scene::from_scene(&device, &scene)?;
 
     let vs = vs::Shader::load(device.clone())
         .with_context(|e| format_err!("Failed to load vertex shader: {}", e))?;
@@ -57,7 +58,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                 depth: {
                     load: Clear,
                     store: DontCare,
-                    format: Format::D16Unorm,
+                    format: DEPTH_FORMAT,
                     samples: 1,
                 }
             },
@@ -73,10 +74,18 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
         window_size_dependent_setup(device.clone(), &vs, &fs, &images, render_pass.clone())?;
     let mut recreate_swapchain = false;
 
+    let scene = fbx::load(&opt.fbx_path)?;
+    let (drawable_scene, scene_load_future_opt) =
+        fbx_viewer::drawable::vulkan::Loader::new(device.clone(), queue.clone(), pipeline.clone())
+            .load(&scene)?;
+
     let mut previous_frame =
-        Box::new(vulkano::sync::now(device.clone())) as Box<dyn vulkano::sync::GpuFuture>;
+        scene_load_future_opt.unwrap_or_else(|| Box::new(vulkano::sync::now(device.clone())));
     let rotation_start = std::time::Instant::now();
 
+    previous_frame
+        .flush()
+        .with_context(|e| format_err!("Failed to prepare resources: {}", e))?;
     'main: loop {
         previous_frame.cleanup_finished();
         if recreate_swapchain {
@@ -126,7 +135,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
             uniform_buffer.next(uniform_data)?
         };
 
-        let set = Arc::new(
+        let set0 = Arc::new(
             PersistentDescriptorSet::start(pipeline.clone(), 0)
                 .add_buffer(uniform_buffer_subbuffer)?
                 .build()?,
@@ -149,19 +158,35 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                         false,
                         vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()],
                     )?;
+            let mut opaque_submeshes = Vec::new();
+            let mut transparent_submeshes = Vec::new();
             for model in drawable_scene.iter_models() {
                 for mesh in model.iter_meshes() {
                     for submesh in mesh.submeshes() {
-                        builder = builder.draw_indexed(
-                            pipeline.clone(),
-                            &DynamicState::none(),
-                            vec![mesh.vertex().clone()],
-                            submesh.index().clone(),
-                            set.clone(),
-                            (),
-                        )?;
+                        if let Some(texture) = submesh.texture() {
+                            if texture.is_transparent() {
+                                transparent_submeshes.push((mesh, submesh, texture));
+                            } else {
+                                opaque_submeshes.push((mesh, submesh, texture));
+                            }
+                        } else {
+                            // TODO: Support submesh without texture.
+                        }
                     }
                 }
+            }
+            // Draw opaque meshes first, then transparent ones.
+            for (mesh, submesh, texture) in
+                opaque_submeshes.into_iter().chain(transparent_submeshes)
+            {
+                builder = builder.draw_indexed(
+                    pipeline.clone(),
+                    &DynamicState::none(),
+                    vec![mesh.vertex().clone()],
+                    submesh.index().clone(),
+                    (set0.clone(), texture.descriptor_set().clone()),
+                    (),
+                )?;
             }
             builder.end_render_pass()?.build()?
         };
@@ -221,7 +246,7 @@ fn window_size_dependent_setup(
     Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
 )> {
     let dimensions = images[0].dimensions();
-    let depth_buffer = AttachmentImage::transient(device.clone(), dimensions, Format::D16Unorm)?;
+    let depth_buffer = AttachmentImage::transient(device.clone(), dimensions, DEPTH_FORMAT)?;
 
     let framebuffers = images
         .iter()
@@ -247,6 +272,7 @@ fn window_size_dependent_setup(
             depth_range: 0.0..1.0,
         }))
         .fragment_shader(fs.main_entry_point(), ())
+        .blend_alpha_blending()
         .depth_stencil_simple_depth()
         .render_pass(
             Subpass::from(render_pass.clone(), 0)
