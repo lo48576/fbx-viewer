@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 
-use failure::{format_err, Fallible};
+use failure::{format_err, Fallible, ResultExt};
 use fbxcel_dom::v7400::{
     data::mesh::layer::TypedLayerElementHandle,
     object::{
@@ -60,13 +60,20 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
         );
 
         let mesh: Mesh = {
-            let geometry = mesh_obj.geometry()?;
+            let geometry = mesh_obj
+                .geometry()
+                .with_context(|e| format_err!("Failed to get geometry: {}", e))?;
             trace!("Geometry ID: {:?}", geometry.object_id());
             // Mesh.
-            let control_points = geometry.control_points()?;
-            let polygon_vertex_indices = geometry.polygon_vertex_indices()?;
-            let triangle_pvi_indices =
-                polygon_vertex_indices.triangulate_each(&control_points, triangulator)?;
+            let control_points = geometry
+                .control_points()
+                .with_context(|e| format_err!("Failed to get control points: {}", e))?;
+            let polygon_vertex_indices = geometry
+                .polygon_vertex_indices()
+                .with_context(|e| format_err!("Failed to get polygon vertices: {}", e))?;
+            let triangle_pvi_indices = polygon_vertex_indices
+                .triangulate_each(&control_points, triangulator)
+                .with_context(|e| format_err!("Triangulation failed: {}", e))?;
             let positions = triangle_pvi_indices
                 .iter_control_point_indices()
                 .map(|cpi| {
@@ -76,7 +83,8 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                         .get_cp_f32(cpi)
                         .ok_or_else(|| format_err!("Failed to get control point"))
                 })
-                .collect::<Result<Vec<_>, _>>()?;
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|e| format_err!("Failed to reconstruct position vertices: {}", e))?;
             let layer = geometry
                 .layers()
                 .next()
@@ -94,7 +102,10 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                 triangle_pvi_indices
                     .triangle_vertex_indices()
                     .map(|tri_vi| normals.get_xyz_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
-                    .collect::<Result<Vec<_>, _>>()?
+                    .collect::<Result<Vec<_>, _>>()
+                    .with_context(|e| {
+                        format_err!("Failed to reconstruct normals vertices: {}", e)
+                    })?
             };
             let uv = {
                 let uv = layer
@@ -109,7 +120,8 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                 triangle_pvi_indices
                     .triangle_vertex_indices()
                     .map(|tri_vi| uv.get_uv_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
-                    .collect::<Result<Vec<_>, _>>()?
+                    .collect::<Result<Vec<_>, _>>()
+                    .with_context(|e| format_err!("Failed to reconstruct UV vertices: {}", e))?
             };
             let material_indices = {
                 let materials = layer
@@ -119,14 +131,18 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                         _ => None,
                     })
                     .next()
-                    .ok_or_else(|| format_err!("Failed to get materials"))?
-                    .materials()?;
+                    .ok_or_else(|| format_err!("Materials not found for mesh {:?}", mesh_obj))?
+                    .materials()
+                    .with_context(|e| format_err!("Failed to get materials: {}", e))?;
                 triangle_pvi_indices
                     .triangle_vertex_indices()
                     .map(|tri_vi| {
                         materials.get_material_index_by_tri_vi(&triangle_pvi_indices, tri_vi)
                     })
-                    .collect::<Result<Vec<_>, _>>()?
+                    .collect::<Result<Vec<_>, _>>()
+                    .with_context(|e| {
+                        format_err!("Failed to reconstruct material indices: {}", e)
+                    })?
             };
             trace!("vertices len: {:?}", positions.len());
             let vertices = positions
@@ -160,9 +176,12 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                         }
                     };
                     let name = texture_obj.name();
-                    let video_clip_obj = texture_obj.video_clip().ok_or_else(|| {
-                        format_err!("No image data for texture object: {:?}", texture_obj)
-                    })?;
+                    let video_clip_obj = texture_obj
+                        .video_clip()
+                        .ok_or_else(|| {
+                            format_err!("No image data for texture object: {:?}", texture_obj)
+                        })
+                        .with_context(|e| format_err!("Failed to get video clip object: {}", e))?;
                     trace!("Video clip object found: {:?}", video_clip_obj);
 
                     let tex_id = TextureId(video_clip_obj.object_id().raw());
@@ -178,14 +197,17 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                         .and_then(|s| s.to_str())
                         .map(|s| s.to_ascii_lowercase());
                     trace!("filename: {:?}", video_clip_obj.relative_filename()?);
-                    let content = video_clip_obj.content().ok_or_else(|| {
-                        format_err!("Currently, only embedded texture is supported")
-                    })?;
+                    let content = video_clip_obj
+                        .content()
+                        .ok_or_else(|| format_err!("Currently, only embedded texture is supported"))
+                        .with_context(|e| format_err!("Failed to get texture image: {}", e))?;
                     let image = match file_ext.as_ref().map(AsRef::as_ref) {
                         Some("tga") => {
-                            image::load_from_memory_with_format(content, image::ImageFormat::TGA)?
+                            image::load_from_memory_with_format(content, image::ImageFormat::TGA)
+                                .with_context(|e| format_err!("Failed to load TGA image: {}", e))?
                         }
-                        _ => image::load_from_memory(content)?,
+                        _ => image::load_from_memory(content)
+                            .with_context(|e| format_err!("Failed to load image: {}", e))?,
                     };
                     entry.insert(Texture {
                         name: name.map(Into::into),

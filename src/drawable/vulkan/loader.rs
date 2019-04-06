@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use failure::{format_err, Fallible};
+use failure::{format_err, Fallible, ResultExt};
 use log::{debug, trace};
 use vulkano::{
     buffer::{BufferUsage, CpuAccessibleBuffer},
@@ -57,7 +57,8 @@ impl Loader {
             .models
             .iter()
             .map(|model| self.load_model(model, scene))
-            .collect::<Fallible<_>>()?;
+            .collect::<Fallible<_>>()
+            .with_context(|e| format_err!("Failed to load scene (name={:?}): {}", scene.name, e))?;
         debug!("Successfully loaded a scene to GPU: name={:?}", scene.name);
 
         Ok((
@@ -80,7 +81,8 @@ impl Loader {
             .meshes
             .iter()
             .map(|mesh| self.load_mesh(mesh, scene))
-            .collect::<Fallible<_>>()?;
+            .collect::<Fallible<_>>()
+            .with_context(|e| format_err!("Failed to load model (name={:?}): {}", model.name, e))?;
         debug!("Successfully loaded a model to GPU: name={:?}", model.name);
 
         Ok(Model {
@@ -105,7 +107,8 @@ impl Loader {
             .submeshes
             .iter()
             .map(|submesh| self.load_submesh(submesh, scene))
-            .collect::<Fallible<_>>()?;
+            .collect::<Fallible<_>>()
+            .with_context(|e| format_err!("Failed to load mesh (name={:?}): {}", mesh.name, e))?;
         debug!("Successfully loaded a mesh to GPU: name={:?}", mesh.name);
 
         Ok(Mesh {
@@ -129,11 +132,13 @@ impl Loader {
             self.device.clone(),
             BufferUsage::all(),
             submesh.indices.iter().cloned(),
-        )?;
+        )
+        .with_context(|e| format_err!("Failed to upload submesh indices buffer: {}", e))?;
         let texture = submesh
             .texture_id
             .map(|texture_id| self.load_texture(texture_id, scene))
-            .transpose()?
+            .transpose()
+            .with_context(|e| format_err!("Failed to load texture: {}", e))?
             .cloned();
         debug!(
             "Successfully loaded a submesh to GPU: material_index={:?}, texture_id={:?}",
@@ -181,7 +186,8 @@ impl Loader {
             dim,
             R8G8B8A8Srgb,
             self.queue.clone(),
-        )?;
+        )
+        .with_context(|e| format_err!("Failed to upload texture image: {}", e))?;
         join_futures(&mut self.future, img_future);
         // TODO: Use properties of a texture object.
         let sampler = Sampler::new(
@@ -196,13 +202,16 @@ impl Loader {
             1.0,
             0.0,
             0.0,
-        )?;
+        )
+        .with_context(|e| format_err!("Failed to create sampler: {}", e))?;
         let descriptor_set = Arc::new(
             PersistentDescriptorSet::start(self.pipeline.clone(), 1)
                 .add_sampled_image(image.clone(), sampler.clone())
-                .expect("Failed to add sampled image")
+                .with_context(|e| {
+                    format_err!("Failed to add sampled image to descriptor set: {}", e)
+                })?
                 .build()
-                .expect("Failed to build descriptor set"),
+                .with_context(|e| format_err!("Failed to build descriptor set: {}", e))?,
         ) as Arc<_>;
         let texture = Texture {
             name: tex_data.name.clone(),
@@ -213,8 +222,7 @@ impl Loader {
         };
         debug!(
             "Successfully loaded a texture to GPU: name={:?}, texture_id={:?}",
-            tex_data.name,
-            texture_id
+            tex_data.name, texture_id
         );
 
         Ok(entry.insert(Arc::new(texture)))
