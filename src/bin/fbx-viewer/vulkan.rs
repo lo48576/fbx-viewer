@@ -35,9 +35,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
     let mut dimensions = window_dimensions(&window)?;
     let (mut swapchain, images) = create_swapchain(&device, &queue, &surface)?;
 
-    let scene = fbx::load(&opt.fbx_path)?;
     let uniform_buffer = CpuBufferPool::<vs::ty::Data>::new(device.clone(), BufferUsage::all());
-    let drawable_scene = fbx_viewer::drawable::vulkan::Scene::from_scene(&device, &scene)?;
 
     let vs = vs::Shader::load(device.clone())
         .with_context(|e| format_err!("Failed to load vertex shader: {}", e))?;
@@ -73,10 +71,18 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
         window_size_dependent_setup(device.clone(), &vs, &fs, &images, render_pass.clone())?;
     let mut recreate_swapchain = false;
 
+    let scene = fbx::load(&opt.fbx_path)?;
+    let (drawable_scene, scene_load_future_opt) =
+        fbx_viewer::drawable::vulkan::Loader::new(device.clone(), queue.clone(), pipeline.clone())
+            .load(&scene)?;
+
     let mut previous_frame =
-        Box::new(vulkano::sync::now(device.clone())) as Box<dyn vulkano::sync::GpuFuture>;
+        scene_load_future_opt.unwrap_or_else(|| Box::new(vulkano::sync::now(device.clone())));
     let rotation_start = std::time::Instant::now();
 
+    previous_frame
+        .flush()
+        .with_context(|e| format_err!("Failed to prepare resources: {}", e))?;
     'main: loop {
         previous_frame.cleanup_finished();
         if recreate_swapchain {

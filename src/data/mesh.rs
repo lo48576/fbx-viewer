@@ -1,5 +1,7 @@
 //! Mesh.
 
+use crate::data::texture::TextureId;
+
 /// Mesh.
 #[derive(Debug, Clone)]
 pub struct Mesh {
@@ -16,6 +18,8 @@ pub struct Mesh {
 pub struct SubMesh {
     /// Material index.
     pub material_index: u32,
+    /// Texture ID.
+    pub texture_id: Option<TextureId>,
     /// Indices.
     pub indices: Vec<u32>,
 }

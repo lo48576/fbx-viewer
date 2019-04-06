@@ -1,6 +1,9 @@
 //! FBX v7400 support.
 
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::Path,
+};
 
 use failure::{format_err, Fallible};
 use fbxcel_dom::v7400::{
@@ -11,9 +14,9 @@ use fbxcel_dom::v7400::{
     },
     Document,
 };
-use log::debug;
+use log::{debug, trace};
 
-use crate::data::{mesh::Vertex, Mesh, Model, Scene, SubMesh};
+use crate::data::{mesh::Vertex, Mesh, Model, Scene, SubMesh, Texture, TextureId};
 
 use self::triangulator::triangulator;
 
@@ -32,6 +35,7 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
     let mut scene = Scene::new();
 
     let mut models = HashMap::<ObjectId, (Option<String>, Vec<Mesh>)>::new();
+    let mut textures = HashMap::<TextureId, Texture>::new();
 
     // Load meshes.
     // TODO: support instantiation (geometry sharing among different models).
@@ -57,6 +61,7 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
 
         let mesh: Mesh = {
             let geometry = mesh_obj.geometry()?;
+            trace!("Geometry ID: {:?}", geometry.object_id());
             // Mesh.
             let control_points = geometry.control_points()?;
             let polygon_vertex_indices = geometry.polygon_vertex_indices()?;
@@ -123,6 +128,7 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                     })
                     .collect::<Result<Vec<_>, _>>()?
             };
+            trace!("vertices len: {:?}", positions.len());
             let vertices = positions
                 .into_iter()
                 .zip(normals)
@@ -135,8 +141,65 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                     material,
                 })
                 .collect();
+
+            // Load texture.
+            let texture_ids = {
+                let mut ids = Vec::new();
+                for material_obj in mesh_obj.materials() {
+                    trace!("Material {}: {:?}", ids.len(), material_obj);
+                    let texture_obj_opt = material_obj
+                        .transparent_texture()
+                        .map(|v| (true, v))
+                        .or_else(|| material_obj.diffuse_texture().map(|v| (false, v)));
+                    let (transparent, texture_obj) = match texture_obj_opt {
+                        Some(v) => v,
+                        None => {
+                            trace!("No texture object for material {:?}", material_obj);
+                            ids.push(None);
+                            continue;
+                        }
+                    };
+                    let name = texture_obj.name();
+                    let video_clip_obj = texture_obj.video_clip().ok_or_else(|| {
+                        format_err!("No image data for texture object: {:?}", texture_obj)
+                    })?;
+                    trace!("Video clip object found: {:?}", video_clip_obj);
+
+                    let tex_id = TextureId(video_clip_obj.object_id().raw());
+                    ids.push(Some(tex_id));
+
+                    let entry = match textures.entry(tex_id) {
+                        std::collections::hash_map::Entry::Occupied(_) => continue,
+                        std::collections::hash_map::Entry::Vacant(entry) => entry,
+                    };
+                    trace!("Not cached, loading texture");
+                    let file_ext = Path::new(video_clip_obj.relative_filename()?)
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.to_ascii_lowercase());
+                    trace!("filename: {:?}", video_clip_obj.relative_filename()?);
+                    let content = video_clip_obj.content().ok_or_else(|| {
+                        format_err!("Currently, only embedded texture is supported")
+                    })?;
+                    let image = match file_ext.as_ref().map(AsRef::as_ref) {
+                        Some("tga") => {
+                            image::load_from_memory_with_format(content, image::ImageFormat::TGA)?
+                        }
+                        _ => image::load_from_memory(content)?,
+                    };
+                    entry.insert(Texture {
+                        name: name.map(Into::into),
+                        transparent,
+                        data: image,
+                    });
+                }
+                ids
+            };
+
+            // Create submeshes.
             let mut submeshes = BTreeMap::new();
             assert_eq!(triangle_pvi_indices.len(), material_indices.len());
+            // Split meshes.
             for (pvii, &material_i) in material_indices.iter().enumerate() {
                 submeshes
                     .entry(material_i)
@@ -147,9 +210,11 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                 .into_iter()
                 .map(|(material_index, indices)| SubMesh {
                     material_index: material_index.get_u32(),
+                    texture_id: texture_ids[material_index.get_u32() as usize],
                     indices,
                 })
                 .collect();
+
             Mesh {
                 name: mesh_obj.name().map(Into::into),
                 vertices,
@@ -168,6 +233,8 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
         .into_iter()
         .map(|(_, (name, meshes))| Model { name, meshes })
         .collect();
+
+    scene.textures = textures;
 
     Ok(scene)
 }
