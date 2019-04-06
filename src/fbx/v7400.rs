@@ -7,7 +7,7 @@ use std::{
 
 use failure::{format_err, Fallible, ResultExt};
 use fbxcel_dom::v7400::{
-    data::mesh::layer::TypedLayerElementHandle,
+    data::{mesh::layer::TypedLayerElementHandle, texture::WrapMode},
     object::{
         model::{self, TypedModelHandle},
         ObjectId, TypedObjectHandle,
@@ -15,6 +15,7 @@ use fbxcel_dom::v7400::{
     Document,
 };
 use log::{debug, trace};
+use vulkano::sampler::SamplerAddressMode;
 
 use crate::data::{mesh::Vertex, Mesh, Model, Scene, SubMesh, Texture, TextureId};
 
@@ -175,6 +176,26 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                             continue;
                         }
                     };
+                    let wrap_mode_u = {
+                        let val = texture_obj
+                            .properties()
+                            .wrap_mode_u_or_default()
+                            .with_context(|e| format_err!("Failed to load wrap mode U: {}", e))?;
+                        match val {
+                            WrapMode::Repeat => SamplerAddressMode::Repeat,
+                            WrapMode::Clamp => SamplerAddressMode::ClampToEdge,
+                        }
+                    };
+                    let wrap_mode_v = {
+                        let val = texture_obj
+                            .properties()
+                            .wrap_mode_v_or_default()
+                            .with_context(|e| format_err!("Failed to load wrap mode V: {}", e))?;
+                        match val {
+                            WrapMode::Repeat => SamplerAddressMode::Repeat,
+                            WrapMode::Clamp => SamplerAddressMode::ClampToEdge,
+                        }
+                    };
                     let name = texture_obj.name();
                     let video_clip_obj = texture_obj
                         .video_clip()
@@ -211,8 +232,10 @@ pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
                     };
                     entry.insert(Texture {
                         name: name.map(Into::into),
-                        transparent,
                         data: image,
+                        transparent,
+                        wrap_mode_u,
+                        wrap_mode_v,
                     });
                 }
                 ids

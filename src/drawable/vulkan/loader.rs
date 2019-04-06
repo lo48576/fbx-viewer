@@ -189,14 +189,13 @@ impl Loader {
         )
         .with_context(|e| format_err!("Failed to upload texture image: {}", e))?;
         join_futures(&mut self.future, img_future);
-        // TODO: Use properties of a texture object.
         let sampler = Sampler::new(
             self.device.clone(),
             Filter::Linear,
             Filter::Linear,
             MipmapMode::Nearest,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
+            tex_data.wrap_mode_u,
+            tex_data.wrap_mode_v,
             SamplerAddressMode::Repeat,
             0.0,
             1.0,
