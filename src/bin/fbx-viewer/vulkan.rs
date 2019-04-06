@@ -132,7 +132,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
             uniform_buffer.next(uniform_data)?
         };
 
-        let set = Arc::new(
+        let set0 = Arc::new(
             PersistentDescriptorSet::start(pipeline.clone(), 0)
                 .add_buffer(uniform_buffer_subbuffer)?
                 .build()?,
@@ -155,19 +155,35 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                         false,
                         vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()],
                     )?;
+            let mut opaque_submeshes = Vec::new();
+            let mut transparent_submeshes = Vec::new();
             for model in drawable_scene.iter_models() {
                 for mesh in model.iter_meshes() {
                     for submesh in mesh.submeshes() {
-                        builder = builder.draw_indexed(
-                            pipeline.clone(),
-                            &DynamicState::none(),
-                            vec![mesh.vertex().clone()],
-                            submesh.index().clone(),
-                            set.clone(),
-                            (),
-                        )?;
+                        if let Some(texture) = submesh.texture() {
+                            if texture.is_transparent() {
+                                transparent_submeshes.push((mesh, submesh, texture));
+                            } else {
+                                opaque_submeshes.push((mesh, submesh, texture));
+                            }
+                        } else {
+                            // TODO: Support submesh without texture.
+                        }
                     }
                 }
+            }
+            // Draw opaque meshes first, then transparent ones.
+            for (mesh, submesh, texture) in
+                opaque_submeshes.into_iter().chain(transparent_submeshes)
+            {
+                builder = builder.draw_indexed(
+                    pipeline.clone(),
+                    &DynamicState::none(),
+                    vec![mesh.vertex().clone()],
+                    submesh.index().clone(),
+                    (set0.clone(), texture.descriptor_set().clone()),
+                    (),
+                )?;
             }
             builder.end_render_pass()?.build()?
         };
@@ -253,6 +269,7 @@ fn window_size_dependent_setup(
             depth_range: 0.0..1.0,
         }))
         .fragment_shader(fs.main_entry_point(), ())
+        .blend_alpha_blending()
         .depth_stencil_simple_depth()
         .render_pass(
             Subpass::from(render_pass.clone(), 0)

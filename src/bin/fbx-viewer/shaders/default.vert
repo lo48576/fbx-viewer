@@ -18,7 +18,8 @@ layout(set = 0, binding = 0) uniform Data {
 void main() {
 	mat4 worldview = uniforms.view * uniforms.world;
 	v_normal = (normal + vec3(1.0)) / 2;
-	v_uv = uv;
+	// Use vulkan coordinate system!
+	v_uv = uv * vec2(1.0, -1.0) + vec2(0.0, 1.0);
 	v_material = vec3(float(material));
 	gl_Position = uniforms.proj * worldview * vec4(position, 1.0);
 }
