@@ -3,6 +3,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use failure::{format_err, Fallible};
+use log::{debug, trace};
 use vulkano::{
     buffer::{BufferUsage, CpuAccessibleBuffer},
     descriptor::descriptor_set::PersistentDescriptorSet,
@@ -51,11 +52,13 @@ impl Loader {
         mut self,
         scene: &crate::data::Scene,
     ) -> Fallible<(Scene, Option<Box<dyn GpuFuture>>)> {
+        debug!("Loading a scene to GPU: name={:?}", scene.name);
         let models = scene
             .models
             .iter()
             .map(|model| self.load_model(model, scene))
             .collect::<Fallible<_>>()?;
+        debug!("Successfully loaded a scene to GPU: name={:?}", scene.name);
 
         Ok((
             Scene {
@@ -72,11 +75,13 @@ impl Loader {
         model: &crate::data::Model,
         scene: &crate::data::Scene,
     ) -> Fallible<Model> {
+        debug!("Loading a model to GPU: name={:?}", model.name);
         let meshes = model
             .meshes
             .iter()
             .map(|mesh| self.load_mesh(mesh, scene))
             .collect::<Fallible<_>>()?;
+        debug!("Successfully loaded a model to GPU: name={:?}", model.name);
 
         Ok(Model {
             name: model.name.clone(),
@@ -90,6 +95,7 @@ impl Loader {
         mesh: &crate::data::Mesh,
         scene: &crate::data::Scene,
     ) -> Fallible<Mesh> {
+        debug!("Loading a mesh to GPU: name={:?}", mesh.name);
         let vertex = CpuAccessibleBuffer::from_iter(
             self.device.clone(),
             BufferUsage::all(),
@@ -100,6 +106,7 @@ impl Loader {
             .iter()
             .map(|submesh| self.load_submesh(submesh, scene))
             .collect::<Fallible<_>>()?;
+        debug!("Successfully loaded a mesh to GPU: name={:?}", mesh.name);
 
         Ok(Mesh {
             name: mesh.name.clone(),
@@ -114,6 +121,10 @@ impl Loader {
         submesh: &crate::data::SubMesh,
         scene: &crate::data::Scene,
     ) -> Fallible<SubMesh> {
+        debug!(
+            "Loading a submesh to GPU: material_index={:?}, texture_id={:?}",
+            submesh.material_index, submesh.texture_id
+        );
         let indices = CpuAccessibleBuffer::from_iter(
             self.device.clone(),
             BufferUsage::all(),
@@ -124,6 +135,10 @@ impl Loader {
             .map(|texture_id| self.load_texture(texture_id, scene))
             .transpose()?
             .cloned();
+        debug!(
+            "Successfully loaded a submesh to GPU: material_index={:?}, texture_id={:?}",
+            submesh.material_index, submesh.texture_id
+        );
 
         Ok(SubMesh {
             material_index: submesh.material_index,
@@ -141,10 +156,18 @@ impl Loader {
         use image::GenericImageView;
         use std::collections::hash_map::Entry;
 
+        trace!(
+            "Checking whether the texture is already loaded to GPU: texture_id={:?}",
+            texture_id
+        );
         let entry = match self.loaded_textures.entry(texture_id) {
-            Entry::Occupied(entry) => return Ok(entry.into_mut()),
+            Entry::Occupied(entry) => {
+                trace!("Texture already loaedd to GPU: texture_id={:?}", texture_id);
+                return Ok(entry.into_mut());
+            }
             Entry::Vacant(entry) => entry,
         };
+        debug!("Loading a texture to GPU: texture_id={:?}", texture_id);
         let tex_data = scene
             .textures
             .get(&texture_id)
@@ -188,6 +211,12 @@ impl Loader {
             sampler,
             descriptor_set,
         };
+        debug!(
+            "Successfully loaded a texture to GPU: name={:?}, texture_id={:?}",
+            tex_data.name,
+            texture_id
+        );
+
         Ok(entry.insert(Arc::new(texture)))
     }
 }
