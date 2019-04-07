@@ -1,12 +1,14 @@
 //! Mesh.
 
-use crate::data::GeometryMeshIndex;
+use crate::data::{GeometryMeshIndex, MaterialIndex};
 
 /// Mesh.
 #[derive(Debug, Clone)]
 pub struct Mesh {
     /// Geometry mesh index.
     pub(crate) geometry_mesh_index: GeometryMeshIndex,
+    /// Materials.
+    pub(crate) materials: Vec<MaterialIndex>,
 }
 
 impl Mesh {

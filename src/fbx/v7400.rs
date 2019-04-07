@@ -64,6 +64,7 @@ impl<'a> Loader<'a> {
     fn load_geometry_mesh(
         &mut self,
         mesh_obj: object::geometry::MeshHandle<'a>,
+        num_materials: usize,
     ) -> Fallible<GeometryMeshIndex> {
         if let Some(index) = self.geometry_mesh_indices.get(&mesh_obj.object_id()) {
             return Ok(*index);
@@ -131,6 +132,39 @@ impl<'a> Loader<'a> {
                 .with_context(|e| format_err!("Failed to reconstruct UV vertices: {}", e))?
         };
 
+        let indices_per_material = {
+            let mut indices_per_material = vec![Vec::new(); num_materials];
+            let materials = layer
+                .layer_element_entries()
+                .filter_map(|entry| match entry.typed_layer_element() {
+                    Ok(TypedLayerElementHandle::Material(handle)) => Some(handle),
+                    _ => None,
+                })
+                .next()
+                .ok_or_else(|| format_err!("Materials not found for mesh {:?}", mesh_obj))?
+                .materials()
+                .with_context(|e| format_err!("Failed to get materials: {}", e))?;
+            for tri_vi in triangle_pvi_indices.triangle_vertex_indices() {
+                let local_material_index = materials
+                    .get_material_index_by_tri_vi(&triangle_pvi_indices, tri_vi)
+                    .with_context(|e| {
+                        format_err!("Failed to get mesh-local material index: {}", e)
+                    })?
+                    .get_u32();
+                indices_per_material
+                    .get_mut(local_material_index as usize)
+                    .ok_or_else(|| {
+                        format_err!(
+                            "Mesh-local material index out of range: num_materials={:?}, got={:?}",
+                            num_materials,
+                            local_material_index
+                        )
+                    })?
+                    .push(tri_vi.get() as u32);
+            }
+            indices_per_material
+        };
+
         if positions.len() != normals.len() {
             bail!(
                 "Vertices length mismatch: positions.len={:?}, normals.len={:?}",
@@ -150,6 +184,7 @@ impl<'a> Loader<'a> {
             positions,
             normals,
             uv,
+            indices_per_material,
         };
 
         debug!("Successfully loaded geometry mesh: {:?}", mesh_obj);
@@ -194,11 +229,12 @@ impl<'a> Loader<'a> {
             .with_context(|e| format_err!("Failed to load materials for mesh: {}", e))?;
 
         let geometry_index = self
-            .load_geometry_mesh(geometry_obj)
+            .load_geometry_mesh(geometry_obj, materials.len())
             .with_context(|e| format_err!("Failed to load geometry mesh: {}", e))?;
 
         let mesh = Mesh {
             geometry_mesh_index: geometry_index,
+            materials,
         };
 
         debug!("Successfully loaded mesh: {:?}", mesh_obj);
