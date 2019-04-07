@@ -2,16 +2,18 @@
 
 use std::collections::HashMap;
 
-use failure::{format_err, Fallible, ResultExt};
+use failure::{bail, format_err, Fallible, ResultExt};
 use fbxcel_dom::v7400::{
+    data::mesh::layer::TypedLayerElementHandle,
     object::{self, model::TypedModelHandle, ObjectId, TypedObjectHandle},
     Document,
 };
-use log::debug;
+use log::{debug, trace};
 
 use crate::data::{GeometryMesh, GeometryMeshIndex, Mesh, MeshIndex, Scene};
 
-#[allow(dead_code)]
+use self::triangulator::triangulator;
+
 mod triangulator;
 
 /// Loads the data from the document.
@@ -25,10 +27,10 @@ pub struct Loader<'a> {
     doc: &'a Document,
     /// Scene.
     scene: Scene,
-    /// Mesh indices.
-    mesh_indices: HashMap<ObjectId, MeshIndex>,
     /// Geometry mesh indices.
     geometry_mesh_indices: HashMap<ObjectId, GeometryMeshIndex>,
+    /// Mesh indices.
+    mesh_indices: HashMap<ObjectId, MeshIndex>,
 }
 
 impl<'a> Loader<'a> {
@@ -37,8 +39,8 @@ impl<'a> Loader<'a> {
         Self {
             doc,
             scene: Default::default(),
-            mesh_indices: Default::default(),
             geometry_mesh_indices: Default::default(),
+            mesh_indices: Default::default(),
         }
     }
 
@@ -51,6 +53,103 @@ impl<'a> Loader<'a> {
         }
 
         Ok(self.scene)
+    }
+
+    /// Loads the geometry.
+    fn load_geometry_mesh(
+        &mut self,
+        mesh_obj: object::geometry::MeshHandle<'a>,
+    ) -> Fallible<GeometryMeshIndex> {
+        if let Some(index) = self.geometry_mesh_indices.get(&mesh_obj.object_id()) {
+            return Ok(*index);
+        }
+
+        debug!("Loading geometry mesh: {:?}", mesh_obj);
+
+        let control_points = mesh_obj
+            .control_points()
+            .with_context(|e| format_err!("Failed to get control points: {}", e))?;
+        let polygon_vertices = mesh_obj
+            .polygon_vertex_indices()
+            .with_context(|e| format_err!("Failed to get polygon vertices: {}", e))?;
+        let triangle_pvi_indices = polygon_vertices
+            .triangulate_each(&control_points, triangulator)
+            .with_context(|e| format_err!("Triangulation failed: {}", e))?;
+
+        let positions = triangle_pvi_indices
+            .iter_control_point_indices()
+            .map(|cpi| {
+                let cpi = cpi.ok_or_else(|| format_err!("Failed to get control point index"))?;
+                control_points
+                    .get_cp_f32(cpi)
+                    .ok_or_else(|| format_err!("Failed to get control point"))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .with_context(|e| format_err!("Failed to reconstruct position vertices: {}", e))?;
+        trace!("Expanded positions len: {:?}", positions.len());
+
+        let layer = mesh_obj
+            .layers()
+            .next()
+            .ok_or_else(|| format_err!("Failed to get layer"))?;
+
+        let normals = {
+            let normals = layer
+                .layer_element_entries()
+                .filter_map(|entry| match entry.typed_layer_element() {
+                    Ok(TypedLayerElementHandle::Normal(handle)) => Some(handle),
+                    _ => None,
+                })
+                .next()
+                .ok_or_else(|| format_err!("Failed to get normals"))?
+                .normals()?;
+            triangle_pvi_indices
+                .triangle_vertex_indices()
+                .map(|tri_vi| normals.get_xyz_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|e| format_err!("Failed to reconstruct normals vertices: {}", e))?
+        };
+        let uv = {
+            let uv = layer
+                .layer_element_entries()
+                .filter_map(|entry| match entry.typed_layer_element() {
+                    Ok(TypedLayerElementHandle::Uv(handle)) => Some(handle),
+                    _ => None,
+                })
+                .next()
+                .ok_or_else(|| format_err!("Failed to get UV"))?
+                .uv()?;
+            triangle_pvi_indices
+                .triangle_vertex_indices()
+                .map(|tri_vi| uv.get_uv_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|e| format_err!("Failed to reconstruct UV vertices: {}", e))?
+        };
+
+        if positions.len() != normals.len() {
+            bail!(
+                "Vertices length mismatch: positions.len={:?}, normals.len={:?}",
+                positions.len(),
+                normals.len()
+            );
+        }
+        if positions.len() != uv.len() {
+            bail!(
+                "Vertices length mismatch: positions.len={:?}, uv.len={:?}",
+                positions.len(),
+                uv.len()
+            );
+        }
+
+        let mesh = GeometryMesh {
+            positions,
+            normals,
+            uv,
+        };
+
+        debug!("Successfully loaded geometry mesh: {:?}", mesh_obj);
+
+        Ok(self.scene.add_geometry_mesh(mesh))
     }
 
     /// Loads the mesh.
@@ -76,23 +175,5 @@ impl<'a> Loader<'a> {
         debug!("Successfully loaded mesh: {:?}", mesh_obj);
 
         Ok(self.scene.add_mesh(mesh))
-    }
-
-    /// Loads the geometry.
-    fn load_geometry_mesh(
-        &mut self,
-        mesh_obj: object::geometry::MeshHandle<'a>,
-    ) -> Fallible<GeometryMeshIndex> {
-        if let Some(index) = self.geometry_mesh_indices.get(&mesh_obj.object_id()) {
-            return Ok(*index);
-        }
-
-        debug!("Loading geometry mesh: {:?}", mesh_obj);
-
-        let mesh = GeometryMesh {};
-
-        debug!("Successfully loaded geometry mesh: {:?}", mesh_obj);
-
-        Ok(self.scene.add_geometry_mesh(mesh))
     }
 }
