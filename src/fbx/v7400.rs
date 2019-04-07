@@ -1,10 +1,10 @@
 //! FBX v7400 support.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use failure::{bail, format_err, Fallible, ResultExt};
 use fbxcel_dom::v7400::{
-    data::mesh::layer::TypedLayerElementHandle,
+    data::{mesh::layer::TypedLayerElementHandle, texture::WrapMode as RawWrapMode},
     object::{self, model::TypedModelHandle, ObjectId, TypedObjectHandle},
     Document,
 };
@@ -12,7 +12,7 @@ use log::{debug, trace};
 
 use crate::data::{
     GeometryMesh, GeometryMeshIndex, Material, MaterialIndex, Mesh, MeshIndex, Scene, Texture,
-    TextureIndex,
+    TextureIndex, WrapMode,
 };
 
 use self::triangulator::triangulator;
@@ -268,10 +268,72 @@ impl<'a> Loader<'a> {
 
         debug!("Loading texture: {:?}", texture_obj);
 
-        let texture = Texture { transparent };
+        let properties = texture_obj.properties();
+        let wrap_mode_u = {
+            let val = properties
+                .wrap_mode_u_or_default()
+                .with_context(|e| format_err!("Failed to load wrap mode for U axis: {}", e))?;
+            match val {
+                RawWrapMode::Repeat => WrapMode::Repeat,
+                RawWrapMode::Clamp => WrapMode::ClampToEdge,
+            }
+        };
+        let wrap_mode_v = {
+            let val = properties
+                .wrap_mode_v_or_default()
+                .with_context(|e| format_err!("Failed to load wrap mode for V axis: {}", e))?;
+            match val {
+                RawWrapMode::Repeat => WrapMode::Repeat,
+                RawWrapMode::Clamp => WrapMode::ClampToEdge,
+            }
+        };
+        let video_clip_obj = texture_obj
+            .video_clip()
+            .ok_or_else(|| format_err!("No image data for texture object: {:?}", texture_obj))?;
+        let image = self
+            .load_video_clip(video_clip_obj)
+            .with_context(|e| format_err!("Failed to load texture image: {}", e))?;
+
+        let texture = Texture {
+            image,
+            transparent,
+            wrap_mode_u,
+            wrap_mode_v,
+        };
 
         debug!("Successfully loaded texture: {:?}", texture_obj);
 
         Ok(self.scene.add_texture(texture))
+    }
+
+    /// Loads the texture image.
+    fn load_video_clip(
+        &mut self,
+        video_clip_obj: object::video::ClipHandle<'a>,
+    ) -> Fallible<image::DynamicImage> {
+        debug!("Loading texture image: {:?}", video_clip_obj);
+
+        let relative_filename = video_clip_obj.relative_filename().with_context(|e| {
+            format_err!("Failed to get relative filename of texture image: {}", e)
+        })?;
+        trace!("Relative filename: {:?}", relative_filename);
+        let file_ext = Path::new(&relative_filename)
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_ascii_lowercase());
+        trace!("File extension: {:?}", file_ext);
+        let content = video_clip_obj
+            .content()
+            .ok_or_else(|| format_err!("Currently, only embedded texture is supported"))?;
+        let image = match file_ext.as_ref().map(AsRef::as_ref) {
+            Some("tga") => image::load_from_memory_with_format(content, image::ImageFormat::TGA)
+                .with_context(|e| format_err!("Failed to load TGA image: {}", e))?,
+            _ => image::load_from_memory(content)
+                .with_context(|e| format_err!("Failed to load image: {}", e))?,
+        };
+
+        debug!("Successfully loaded texture image: {:?}", video_clip_obj);
+
+        Ok(image)
     }
 }

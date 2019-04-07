@@ -5,7 +5,7 @@ pub use self::{
     material::Material,
     mesh::Mesh,
     scene::{GeometryMeshIndex, MaterialIndex, MeshIndex, Scene, TextureIndex},
-    texture::Texture,
+    texture::{Texture, WrapMode},
 };
 
 mod geometry;
