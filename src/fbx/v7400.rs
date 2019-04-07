@@ -11,7 +11,8 @@ use fbxcel_dom::v7400::{
 use log::{debug, trace};
 
 use crate::data::{
-    GeometryMesh, GeometryMeshIndex, Material, MaterialIndex, Mesh, MeshIndex, Scene,
+    GeometryMesh, GeometryMeshIndex, Material, MaterialIndex, Mesh, MeshIndex, Scene, Texture,
+    TextureIndex,
 };
 
 use self::triangulator::triangulator;
@@ -35,6 +36,8 @@ pub struct Loader<'a> {
     material_indices: HashMap<ObjectId, MaterialIndex>,
     /// Mesh indices.
     mesh_indices: HashMap<ObjectId, MeshIndex>,
+    /// Texture indices.
+    texture_indices: HashMap<ObjectId, TextureIndex>,
 }
 
 impl<'a> Loader<'a> {
@@ -46,6 +49,7 @@ impl<'a> Loader<'a> {
             geometry_mesh_indices: Default::default(),
             material_indices: Default::default(),
             mesh_indices: Default::default(),
+            texture_indices: Default::default(),
         }
     }
 
@@ -203,7 +207,17 @@ impl<'a> Loader<'a> {
 
         debug!("Loading material: {:?}", material_obj);
 
-        let material = Material {};
+        let diffuse_texture = material_obj
+            .transparent_texture()
+            .map(|v| (true, v))
+            .or_else(|| material_obj.diffuse_texture().map(|v| (false, v)))
+            .map(|(transparent, texture_obj)| {
+                self.load_texture(texture_obj, transparent)
+                    .with_context(|e| format_err!("Failed to load diffuse texture: {}", e))
+            })
+            .transpose()?;
+
+        let material = Material { diffuse_texture };
 
         debug!("Successfully loaded material: {:?}", material_obj);
 
@@ -240,5 +254,24 @@ impl<'a> Loader<'a> {
         debug!("Successfully loaded mesh: {:?}", mesh_obj);
 
         Ok(self.scene.add_mesh(mesh))
+    }
+
+    /// Loads the texture.
+    fn load_texture(
+        &mut self,
+        texture_obj: object::texture::TextureHandle<'a>,
+        transparent: bool,
+    ) -> Fallible<TextureIndex> {
+        if let Some(index) = self.texture_indices.get(&texture_obj.object_id()) {
+            return Ok(*index);
+        }
+
+        debug!("Loading texture: {:?}", texture_obj);
+
+        let texture = Texture { transparent };
+
+        debug!("Successfully loaded texture: {:?}", texture_obj);
+
+        Ok(self.scene.add_texture(texture))
     }
 }

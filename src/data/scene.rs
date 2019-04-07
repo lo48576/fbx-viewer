@@ -1,6 +1,6 @@
 //! Scene.
 
-use crate::data::{GeometryMesh, Material, Mesh};
+use crate::data::{GeometryMesh, Material, Mesh, Texture};
 
 /// Scene.
 #[derive(Default, Debug, Clone)]
@@ -13,6 +13,8 @@ pub struct Scene {
     materials: Vec<Material>,
     /// Meshes.
     meshes: Vec<Mesh>,
+    /// Textures.
+    textures: Vec<Texture>,
 }
 
 impl Scene {
@@ -60,6 +62,18 @@ impl Scene {
     /// Returns a reference to the mesh.
     pub fn mesh(&self, i: MeshIndex) -> Option<&Mesh> {
         self.meshes.get(i.to_usize())
+    }
+
+    /// Add a texture.
+    pub(crate) fn add_texture(&mut self, texture: Texture) -> TextureIndex {
+        let index = TextureIndex::new(self.textures.len());
+        self.textures.push(texture);
+        index
+    }
+
+    /// Returns a reference to the texture.
+    pub fn texture(&self, i: TextureIndex) -> Option<&Texture> {
+        self.textures.get(i.to_usize())
     }
 }
 
@@ -112,4 +126,6 @@ define_index_type! {
     MaterialIndex;
     /// Mesh index.
     MeshIndex;
+    /// Texture index.
+    TextureIndex;
 }
