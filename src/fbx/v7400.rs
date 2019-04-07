@@ -188,6 +188,7 @@ impl<'a> Loader<'a> {
         }
 
         let mesh = GeometryMesh {
+            name: mesh_obj.name().map(Into::into),
             positions,
             normals,
             uv,
@@ -269,6 +270,7 @@ impl<'a> Loader<'a> {
         };
 
         let material = Material {
+            name: material_obj.name().map(Into::into),
             diffuse_texture,
             data: shading_data,
         };
@@ -301,6 +303,7 @@ impl<'a> Loader<'a> {
             .with_context(|e| format_err!("Failed to load geometry mesh: {}", e))?;
 
         let mesh = Mesh {
+            name: mesh_obj.name().map(Into::into),
             geometry_mesh_index: geometry_index,
             materials,
         };
@@ -349,6 +352,7 @@ impl<'a> Loader<'a> {
             .with_context(|e| format_err!("Failed to load texture image: {}", e))?;
 
         let texture = Texture {
+            name: texture_obj.name().map(Into::into),
             image,
             transparent,
             wrap_mode_u,

@@ -3,6 +3,8 @@
 /// Geometry mesh.
 #[derive(Debug, Clone)]
 pub struct GeometryMesh {
+    /// Name.
+    pub(crate) name: Option<String>,
     /// Positions.
     pub(crate) positions: Vec<[f32; 3]>,
     /// Normals.

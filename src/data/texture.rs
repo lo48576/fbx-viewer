@@ -7,6 +7,8 @@ use image::DynamicImage;
 /// Texture.
 #[derive(Clone)]
 pub struct Texture {
+    /// Name.
+    pub(crate) name: Option<String>,
     /// Image.
     pub(crate) image: DynamicImage,
     /// Whether the texture can be transparent.
@@ -35,6 +37,7 @@ impl fmt::Debug for Texture {
         }
 
         f.debug_struct("Texture")
+            .field("name", &self.name)
             .field(
                 "image",
                 &ImageInfo {

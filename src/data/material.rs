@@ -5,6 +5,8 @@ use crate::data::TextureIndex;
 /// Material.
 #[derive(Debug, Clone)]
 pub struct Material {
+    /// Name.
+    pub(crate) name: Option<String>,
     /// Texture index.
     pub(crate) diffuse_texture: Option<TextureIndex>,
     /// Shading parameters.
