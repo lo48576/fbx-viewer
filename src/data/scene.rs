@@ -1,12 +1,14 @@
 //! Scene.
 
-use crate::data::Mesh;
+use crate::data::{GeometryMesh, Mesh};
 
 /// Scene.
 #[derive(Default, Debug, Clone)]
 pub struct Scene {
     /// Scene name.
     name: Option<String>,
+    /// Geometry mesh.
+    geometry_meshes: Vec<GeometryMesh>,
     /// Meshes.
     meshes: Vec<Mesh>,
 }
@@ -20,6 +22,18 @@ impl Scene {
     /// Sets the scene name.
     pub fn set_name(&mut self, name: impl Into<Option<String>>) {
         self.name = name.into();
+    }
+
+    /// Add a geometry mesh.
+    pub(crate) fn add_geometry_mesh(&mut self, mesh: GeometryMesh) -> GeometryMeshIndex {
+        let index = GeometryMeshIndex::new(self.meshes.len());
+        self.geometry_meshes.push(mesh);
+        index
+    }
+
+    /// Returns a reference to the geometry mesh.
+    pub fn geometry_mesh(&self, i: GeometryMeshIndex) -> Option<&GeometryMesh> {
+        self.geometry_meshes.get(i.to_usize())
     }
 
     /// Add a mesh.
@@ -78,6 +92,8 @@ macro_rules! define_index_type {
 }
 
 define_index_type! {
+    /// Geometry mesh index.
+    GeometryMeshIndex;
     /// Mesh index.
     MeshIndex;
 }
