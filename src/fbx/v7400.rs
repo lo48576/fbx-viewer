@@ -4,15 +4,18 @@ use std::{collections::HashMap, path::Path};
 
 use failure::{bail, format_err, Fallible, ResultExt};
 use fbxcel_dom::v7400::{
-    data::{mesh::layer::TypedLayerElementHandle, texture::WrapMode as RawWrapMode},
+    data::{
+        material::ShadingModel, mesh::layer::TypedLayerElementHandle,
+        texture::WrapMode as RawWrapMode,
+    },
     object::{self, model::TypedModelHandle, ObjectId, TypedObjectHandle},
     Document,
 };
 use log::{debug, trace};
 
 use crate::data::{
-    GeometryMesh, GeometryMeshIndex, Material, MaterialIndex, Mesh, MeshIndex, Scene, Texture,
-    TextureIndex, WrapMode,
+    GeometryMesh, GeometryMeshIndex, LambertData, Material, MaterialIndex, Mesh, MeshIndex, Scene,
+    ShadingData, Texture, TextureIndex, WrapMode,
 };
 
 use self::triangulator::triangulator;
@@ -217,7 +220,58 @@ impl<'a> Loader<'a> {
             })
             .transpose()?;
 
-        let material = Material { diffuse_texture };
+        let properties = material_obj.properties();
+        let shading_data = match properties
+            .shading_model_or_default()
+            .with_context(|e| format_err!("Failed to get shading model: {}", e))?
+        {
+            ShadingModel::Lambert | ShadingModel::Phong => {
+                let ambient_color = properties
+                    .ambient_color_or_default()
+                    .with_context(|e| format_err!("Failed to get ambient color: {}", e))?;
+                let ambient_factor = properties
+                    .ambient_factor_or_default()
+                    .with_context(|e| format_err!("Failed to get ambient factor: {}", e))?;
+                let ambient_color = [
+                    (ambient_color[0] * ambient_factor) as f32,
+                    (ambient_color[1] * ambient_factor) as f32,
+                    (ambient_color[2] * ambient_factor) as f32,
+                ];
+                let diffuse_color = properties
+                    .diffuse_color_or_default()
+                    .with_context(|e| format_err!("Failed to get diffuse color: {}", e))?;
+                let diffuse_factor = properties
+                    .diffuse_factor_or_default()
+                    .with_context(|e| format_err!("Failed to get diffuse factor: {}", e))?;
+                let diffuse_color = [
+                    (diffuse_color[0] * diffuse_factor) as f32,
+                    (diffuse_color[1] * diffuse_factor) as f32,
+                    (diffuse_color[2] * diffuse_factor) as f32,
+                ];
+                let emissive_color = properties
+                    .emissive_color_or_default()
+                    .with_context(|e| format_err!("Failed to get emissive color: {}", e))?;
+                let emissive_factor = properties
+                    .emissive_factor_or_default()
+                    .with_context(|e| format_err!("Failed to get emissive factor: {}", e))?;
+                let emissive_color = [
+                    (emissive_color[0] * emissive_factor) as f32,
+                    (emissive_color[1] * emissive_factor) as f32,
+                    (emissive_color[2] * emissive_factor) as f32,
+                ];
+                ShadingData::Lambert(LambertData {
+                    ambient: ambient_color,
+                    diffuse: diffuse_color,
+                    emissive: emissive_color,
+                })
+            }
+            v => bail!("Unknown shading model: {:?}", v),
+        };
+
+        let material = Material {
+            diffuse_texture,
+            data: shading_data,
+        };
 
         debug!("Successfully loaded material: {:?}", material_obj);
 

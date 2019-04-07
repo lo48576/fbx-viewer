@@ -2,7 +2,7 @@
 
 pub use self::{
     geometry::GeometryMesh,
-    material::Material,
+    material::{LambertData, Material, ShadingData},
     mesh::Mesh,
     scene::{GeometryMeshIndex, MaterialIndex, MeshIndex, Scene, TextureIndex},
     texture::{Texture, WrapMode},
