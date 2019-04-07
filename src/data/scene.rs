@@ -1,6 +1,6 @@
 //! Scene.
 
-use crate::data::{GeometryMesh, Mesh};
+use crate::data::{GeometryMesh, Material, Mesh};
 
 /// Scene.
 #[derive(Default, Debug, Clone)]
@@ -9,6 +9,8 @@ pub struct Scene {
     name: Option<String>,
     /// Geometry mesh.
     geometry_meshes: Vec<GeometryMesh>,
+    /// Materials.
+    materials: Vec<Material>,
     /// Meshes.
     meshes: Vec<Mesh>,
 }
@@ -34,6 +36,18 @@ impl Scene {
     /// Returns a reference to the geometry mesh.
     pub fn geometry_mesh(&self, i: GeometryMeshIndex) -> Option<&GeometryMesh> {
         self.geometry_meshes.get(i.to_usize())
+    }
+
+    /// Add a material.
+    pub(crate) fn add_material(&mut self, material: Material) -> MaterialIndex {
+        let index = MaterialIndex::new(self.materials.len());
+        self.materials.push(material);
+        index
+    }
+
+    /// Returns a reference to the material.
+    pub fn material(&self, i: MaterialIndex) -> Option<&Material> {
+        self.materials.get(i.to_usize())
     }
 
     /// Add a mesh.
@@ -94,6 +108,8 @@ macro_rules! define_index_type {
 define_index_type! {
     /// Geometry mesh index.
     GeometryMeshIndex;
+    /// Material index.
+    MaterialIndex;
     /// Mesh index.
     MeshIndex;
 }

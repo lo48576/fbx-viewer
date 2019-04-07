@@ -10,7 +10,9 @@ use fbxcel_dom::v7400::{
 };
 use log::{debug, trace};
 
-use crate::data::{GeometryMesh, GeometryMeshIndex, Mesh, MeshIndex, Scene};
+use crate::data::{
+    GeometryMesh, GeometryMeshIndex, Material, MaterialIndex, Mesh, MeshIndex, Scene,
+};
 
 use self::triangulator::triangulator;
 
@@ -29,6 +31,8 @@ pub struct Loader<'a> {
     scene: Scene,
     /// Geometry mesh indices.
     geometry_mesh_indices: HashMap<ObjectId, GeometryMeshIndex>,
+    /// Material indices.
+    material_indices: HashMap<ObjectId, MaterialIndex>,
     /// Mesh indices.
     mesh_indices: HashMap<ObjectId, MeshIndex>,
 }
@@ -40,6 +44,7 @@ impl<'a> Loader<'a> {
             doc,
             scene: Default::default(),
             geometry_mesh_indices: Default::default(),
+            material_indices: Default::default(),
             mesh_indices: Default::default(),
         }
     }
@@ -152,6 +157,24 @@ impl<'a> Loader<'a> {
         Ok(self.scene.add_geometry_mesh(mesh))
     }
 
+    /// Loads the material.
+    fn load_material(
+        &mut self,
+        material_obj: object::material::MaterialHandle<'a>,
+    ) -> Fallible<MaterialIndex> {
+        if let Some(index) = self.material_indices.get(&material_obj.object_id()) {
+            return Ok(*index);
+        }
+
+        debug!("Loading material: {:?}", material_obj);
+
+        let material = Material {};
+
+        debug!("Successfully loaded material: {:?}", material_obj);
+
+        Ok(self.scene.add_material(material))
+    }
+
     /// Loads the mesh.
     fn load_mesh(&mut self, mesh_obj: object::model::MeshHandle<'a>) -> Fallible<MeshIndex> {
         if let Some(index) = self.mesh_indices.get(&mesh_obj.object_id()) {
@@ -163,6 +186,12 @@ impl<'a> Loader<'a> {
         let geometry_obj = mesh_obj
             .geometry()
             .with_context(|e| format_err!("Failed to get geometry: {}", e))?;
+
+        let materials = mesh_obj
+            .materials()
+            .map(|material_obj| self.load_material(material_obj))
+            .collect::<Fallible<Vec<_>>>()
+            .with_context(|e| format_err!("Failed to load materials for mesh: {}", e))?;
 
         let geometry_index = self
             .load_geometry_mesh(geometry_obj)

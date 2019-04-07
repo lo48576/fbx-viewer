@@ -2,10 +2,12 @@
 
 pub use self::{
     geometry::GeometryMesh,
+    material::Material,
     mesh::Mesh,
-    scene::{GeometryMeshIndex, MeshIndex, Scene},
+    scene::{GeometryMeshIndex, MaterialIndex, MeshIndex, Scene},
 };
 
 mod geometry;
+mod material;
 mod mesh;
 mod scene;
