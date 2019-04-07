@@ -8,7 +8,7 @@ use fbx_viewer::{fbx, CliOpt};
 use log::{error, info, trace};
 use vulkano::{
     buffer::{BufferUsage, CpuBufferPool},
-    command_buffer::{AutoCommandBufferBuilder, DynamicState},
+    command_buffer::AutoCommandBufferBuilder,
     descriptor::descriptor_set::PersistentDescriptorSet,
     device::Device,
     format::Format,
@@ -78,15 +78,10 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
             .with_context(|e| format_err!("Failed to set up pipeline and framebuffers: {}", e))?;
     let mut recreate_swapchain = false;
 
-    let scene = fbx::load(&opt.fbx_path)
+    let _scene = fbx::load(&opt.fbx_path)
         .with_context(|e| format_err!("Failed to interpret FBX scene: {}", e))?;
-    let (drawable_scene, scene_load_future_opt) =
-        fbx_viewer::drawable::vulkan::Loader::new(device.clone(), queue.clone(), pipeline.clone())
-            .load(&scene)
-            .with_context(|e| format_err!("Failed to load FBX scene to GPU: {}", e))?;
 
-    let mut previous_frame =
-        scene_load_future_opt.unwrap_or_else(|| Box::new(vulkano::sync::now(device.clone())));
+    let mut previous_frame: Box<dyn GpuFuture> = Box::new(vulkano::sync::now(device.clone()));
     let rotation_start = std::time::Instant::now();
 
     previous_frame
@@ -168,7 +163,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
 
         let command_buffer =
             {
-                let mut builder = AutoCommandBufferBuilder::primary_one_time_submit(
+                let builder = AutoCommandBufferBuilder::primary_one_time_submit(
                     device.clone(),
                     queue.family(),
                 )
@@ -179,40 +174,8 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                     vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()],
                 )
                 .with_context(|e| format_err!("Failed to begin new render pass creation: {}", e))?;
-                let mut opaque_submeshes = Vec::new();
-                let mut transparent_submeshes = Vec::new();
-                for model in drawable_scene.iter_models() {
-                    for mesh in model.iter_meshes() {
-                        for submesh in mesh.submeshes() {
-                            if let Some(texture) = submesh.texture() {
-                                if texture.is_transparent() {
-                                    transparent_submeshes.push((mesh, submesh, texture));
-                                } else {
-                                    opaque_submeshes.push((mesh, submesh, texture));
-                                }
-                            } else {
-                                // TODO: Support submesh without texture.
-                            }
-                        }
-                    }
-                }
-                // Draw opaque meshes first, then transparent ones.
-                for (mesh, submesh, texture) in
-                    opaque_submeshes.into_iter().chain(transparent_submeshes)
-                {
-                    builder = builder
-                        .draw_indexed(
-                            pipeline.clone(),
-                            &DynamicState::none(),
-                            vec![mesh.vertex().clone()],
-                            submesh.index().clone(),
-                            (set0.clone(), texture.descriptor_set().clone()),
-                            (),
-                        )
-                        .with_context(|e| {
-                            format_err!("Failed to add a draw call to command buffer: {}", e)
-                        })?;
-                }
+                // TODO: Draw scene here.
+                let _ = set0.clone();
                 builder
                     .end_render_pass()
                     .with_context(|e| format_err!("Failed to end a render pass creation: {}", e))?
@@ -300,7 +263,7 @@ fn window_size_dependent_setup(
         .with_context(|e| format_err!("Failed to create framebuffers: {}", e))?;
 
     let pipeline = GraphicsPipeline::start()
-        .vertex_input(SingleBufferDefinition::<fbx_viewer::data::mesh::Vertex>::new())
+        .vertex_input(SingleBufferDefinition::<fbx_viewer::drawable::vulkan::Vertex>::new())
         .vertex_shader(vs.main_entry_point(), ())
         .triangle_list()
         .viewports_dynamic_scissors_irrelevant(1)
