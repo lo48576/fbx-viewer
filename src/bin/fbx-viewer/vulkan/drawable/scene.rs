@@ -9,7 +9,10 @@ use vulkano::{
     sync::GpuFuture,
 };
 
-use crate::vulkan::drawable::{GeometryMesh, Material, Mesh, Texture};
+use crate::vulkan::{
+    drawable::{GeometryMesh, Material, Mesh, Texture},
+    setup::create_diffuse_texture_desc_set,
+};
 
 /// Scene.
 #[derive(Default, Debug, Clone)]
@@ -63,14 +66,11 @@ impl Scene {
 
         for texture in &mut self.textures {
             texture.cache.reset();
-            let descriptor_set = PersistentDescriptorSet::start(pipeline.clone(), 1)
-                .add_sampled_image(texture.image.clone(), texture.sampler.clone())
-                .with_context(|e| {
-                    format_err!("Failed to add sampled image to descriptor set: {}", e)
-                })?
-                .build()
-                .with_context(|e| format_err!("Failed to build texture descriptor set: {}", e))?;
-            texture.cache.descriptor_set = Some(Arc::new(descriptor_set) as Arc<_>);
+            texture.cache.descriptor_set = Some(create_diffuse_texture_desc_set(
+                texture.image.clone(),
+                texture.sampler.clone(),
+                pipeline.clone(),
+            )?);
         }
 
         Ok(future)
