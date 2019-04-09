@@ -10,21 +10,20 @@ use vulkano::{
     buffer::{BufferUsage, CpuBufferPool},
     command_buffer::{AutoCommandBufferBuilder, DynamicState},
     descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet},
-    device::{Device, Queue},
-    format::{Format, R8G8B8A8Srgb},
+    device::Device,
+    format::Format,
     framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass},
-    image::{AttachmentImage, Dimensions, ImmutableImage, SwapchainImage},
+    image::{AttachmentImage, SwapchainImage},
     pipeline::{
         vertex::SingleBufferDefinition, viewport::Viewport, GraphicsPipeline,
         GraphicsPipelineAbstract,
     },
-    sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
     swapchain::{AcquireError, SwapchainCreationError},
     sync::GpuFuture,
 };
 use winit::Window;
 
-use self::setup::{create_swapchain, setup};
+use self::setup::{create_diffuse_texture_desc_set, create_dummy_texture, create_swapchain, setup};
 
 mod drawable;
 mod setup;
@@ -408,54 +407,6 @@ fn window_dimensions(window: &Window) -> Fallible<[u32; 2]> {
         })
         .ok_or_else(|| format_err!("Window no longer exists"))
         .map_err(Into::into)
-}
-
-#[allow(clippy::type_complexity)]
-fn create_dummy_texture(
-    device: Arc<Device>,
-    queue: Arc<Queue>,
-) -> Fallible<(
-    Arc<ImmutableImage<R8G8B8A8Srgb>>,
-    Arc<Sampler>,
-    Box<dyn GpuFuture>,
-)> {
-    let raw_image = [0xffu8; 4];
-    let dim = Dimensions::Dim2d {
-        width: 1,
-        height: 1,
-    };
-    let (image, img_future) =
-        ImmutableImage::from_iter(raw_image.iter().cloned(), dim, R8G8B8A8Srgb, queue)
-            .with_context(|e| format_err!("Failed to upload dummy texture image: {}", e))?;
-    let sampler = Sampler::new(
-        device,
-        Filter::Linear,
-        Filter::Linear,
-        MipmapMode::Nearest,
-        SamplerAddressMode::Repeat,
-        SamplerAddressMode::Repeat,
-        SamplerAddressMode::Repeat,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-    )
-    .with_context(|e| format_err!("Failed to create sampler: {}", e))?;
-
-    Ok((image, sampler, Box::new(img_future)))
-}
-
-fn create_diffuse_texture_desc_set(
-    image: Arc<ImmutableImage<R8G8B8A8Srgb>>,
-    sampler: Arc<Sampler>,
-    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-) -> Fallible<Arc<dyn DescriptorSet + Send + Sync>> {
-    let desc_set = PersistentDescriptorSet::start(pipeline, 1)
-        .add_sampled_image(image.clone(), sampler.clone())
-        .with_context(|e| format_err!("Failed to add sampled image to descriptor set: {}", e))?
-        .build()
-        .with_context(|e| format_err!("Failed to build descriptor set: {}", e))?;
-    Ok(Arc::new(desc_set) as Arc<dyn DescriptorSet + Send + Sync>)
 }
 
 pub mod vs {
