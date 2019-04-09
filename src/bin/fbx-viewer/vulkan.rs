@@ -298,14 +298,14 @@ fn window_dimensions(window: &Window) -> Fallible<[u32; 2]> {
         .map_err(Into::into)
 }
 
-mod vs {
+pub mod vs {
     vulkano_shaders::shader! {
         ty: "vertex",
         path: "src/bin/fbx-viewer/shaders/default.vert",
     }
 }
 
-mod fs {
+pub mod fs {
     vulkano_shaders::shader! {
         ty: "fragment",
         path: "src/bin/fbx-viewer/shaders/default.frag",
