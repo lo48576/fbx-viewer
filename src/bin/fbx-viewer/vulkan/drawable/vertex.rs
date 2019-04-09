@@ -1,4 +1,6 @@
 //! Vertex.
+// Allow `clippy::ref_in_deref` for `vulkano::impl_vertex` macro.
+#![allow(clippy::ref_in_deref)]
 
 /// Vertex.
 #[derive(Debug, Clone, Copy)]

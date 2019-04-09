@@ -7,6 +7,16 @@ layout(location = 0) out vec4 f_color;
 
 layout(set = 1, binding = 0) uniform sampler2D diffuse;
 
+layout(set = 2, binding = 0) uniform Material {
+	vec3 ambient;
+	vec3 diffuse;
+	vec3 emissive;
+	bool enabled;
+} material;
+
 void main() {
-    f_color = texture(diffuse, v_uv);
+    vec4 diffuse = material.enabled ?
+		vec4(material.diffuse, 1.0) :
+		texture(diffuse, v_uv);
+	f_color = diffuse;
 }

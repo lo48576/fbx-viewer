@@ -35,6 +35,11 @@ impl Scene {
         index
     }
 
+    /// Returns an iterator of geometry meshes.
+    pub fn geometry_meshes(&self) -> impl Iterator<Item = &GeometryMesh> {
+        self.geometry_meshes.iter()
+    }
+
     /// Returns a reference to the geometry mesh.
     pub fn geometry_mesh(&self, i: GeometryMeshIndex) -> Option<&GeometryMesh> {
         self.geometry_meshes.get(i.to_usize())
@@ -45,6 +50,11 @@ impl Scene {
         let index = MaterialIndex::new(self.materials.len());
         self.materials.push(material);
         index
+    }
+
+    /// Returns an iterator of materials.
+    pub fn materials(&self) -> impl Iterator<Item = &Material> {
+        self.materials.iter()
     }
 
     /// Returns a reference to the material.
@@ -59,6 +69,11 @@ impl Scene {
         index
     }
 
+    /// Returns an iterator of meshes.
+    pub fn meshes(&self) -> impl Iterator<Item = &Mesh> {
+        self.meshes.iter()
+    }
+
     /// Returns a reference to the mesh.
     pub fn mesh(&self, i: MeshIndex) -> Option<&Mesh> {
         self.meshes.get(i.to_usize())
@@ -69,6 +84,11 @@ impl Scene {
         let index = TextureIndex::new(self.textures.len());
         self.textures.push(texture);
         index
+    }
+
+    /// Returns an iterator of textures.
+    pub fn textures(&self) -> impl Iterator<Item = &Texture> {
+        self.textures.iter()
     }
 
     /// Returns a reference to the texture.
@@ -111,8 +131,7 @@ macro_rules! define_index_type {
             }
 
             /// Retuns `usize` value.
-            #[allow(dead_code)]
-            fn to_usize(self) -> usize {
+            pub fn to_usize(self) -> usize {
                 self.0 as usize
             }
         }

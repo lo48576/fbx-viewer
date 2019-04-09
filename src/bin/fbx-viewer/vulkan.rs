@@ -8,16 +8,17 @@ use fbx_viewer::{fbx, CliOpt};
 use log::{error, info, trace};
 use vulkano::{
     buffer::{BufferUsage, CpuBufferPool},
-    command_buffer::AutoCommandBufferBuilder,
-    descriptor::descriptor_set::PersistentDescriptorSet,
-    device::Device,
-    format::Format,
+    command_buffer::{AutoCommandBufferBuilder, DynamicState},
+    descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet},
+    device::{Device, Queue},
+    format::{Format, R8G8B8A8Srgb},
     framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass},
-    image::{AttachmentImage, SwapchainImage},
+    image::{AttachmentImage, Dimensions, ImmutableImage, SwapchainImage},
     pipeline::{
         vertex::SingleBufferDefinition, viewport::Viewport, GraphicsPipeline,
         GraphicsPipelineAbstract,
     },
+    sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
     swapchain::{AcquireError, SwapchainCreationError},
     sync::GpuFuture,
 };
@@ -25,6 +26,7 @@ use winit::Window;
 
 use self::setup::{create_swapchain, setup};
 
+mod drawable;
 mod setup;
 
 /// Depth format.
@@ -78,10 +80,35 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
             .with_context(|e| format_err!("Failed to set up pipeline and framebuffers: {}", e))?;
     let mut recreate_swapchain = false;
 
-    let _scene = fbx::load(&opt.fbx_path)
-        .with_context(|e| format_err!("Failed to interpret FBX scene: {}", e))?;
-
     let mut previous_frame: Box<dyn GpuFuture> = Box::new(vulkano::sync::now(device.clone()));
+
+    let (dummy_texture_image, dummy_texture_sampler, dummy_texture_future) =
+        create_dummy_texture(device.clone(), queue.clone())
+            .with_context(|e| format_err!("Failed to create dummy texture: {}", e))?;
+    previous_frame = Box::new(previous_frame.join(dummy_texture_future));
+
+    let scene = fbx::load(&opt.fbx_path)
+        .with_context(|e| format_err!("Failed to interpret FBX scene: {}", e))?;
+    let (mut drawable_scene, drawable_scene_future) =
+        drawable::Loader::new(device.clone(), queue.clone())
+            .load(&scene)
+            .with_context(|e| format_err!("Failed to load scene as drawable data: {}", e))?;
+    drop(scene);
+    if let Some(future) = drawable_scene_future {
+        previous_frame = Box::new(previous_frame.join(future));
+    }
+    previous_frame = Box::new(
+        drawable_scene
+            .reset_cache_with_pipeline(&pipeline)?
+            .unwrap_or_else(|| Box::new(vulkano::sync::now(device.clone())))
+            .join(previous_frame),
+    );
+    let mut dummy_texture_desc_set = create_diffuse_texture_desc_set(
+        dummy_texture_image.clone(),
+        dummy_texture_sampler.clone(),
+        pipeline.clone(),
+    )?;
+
     let rotation_start = std::time::Instant::now();
 
     previous_frame
@@ -111,6 +138,15 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
             .with_context(|e| format_err!("Failed to set up pipeline and framebuffers: {}", e))?;
             pipeline = new_pipeline;
             framebuffers = new_framebuffers;
+
+            dummy_texture_desc_set = create_diffuse_texture_desc_set(
+                dummy_texture_image.clone(),
+                dummy_texture_sampler.clone(),
+                pipeline.clone(),
+            )?;
+            previous_frame = drawable_scene
+                .reset_cache_with_pipeline(&pipeline)?
+                .unwrap_or_else(|| Box::new(vulkano::sync::now(device.clone())));
 
             trace!("Swapchain recreation done");
             recreate_swapchain = false;
@@ -161,27 +197,103 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                 Err(e) => bail!("`acquire_next_image()` failed: {}", e),
             };
 
-        let command_buffer =
+        let command_buffer = {
+            let mut builder =
+                AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family())
+                    .with_context(|e| {
+                        format_err!("Failed to create command buffer builder: {}", e)
+                    })?
+                    .begin_render_pass(
+                        framebuffers[image_num].clone(),
+                        false,
+                        vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()],
+                    )
+                    .with_context(|e| {
+                        format_err!("Failed to begin new render pass creation: {}", e)
+                    })?;
+
+            // TODO: Draw scene here.
+            let mut opaque_meshes = Vec::new();
+            let mut transparent_meshes = Vec::new();
+            for mesh in &drawable_scene.meshes {
+                let geometry_mesh_i = mesh.geometry_mesh_index;
+                let geometry_mesh =
+                    drawable_scene
+                        .geometry_mesh(geometry_mesh_i)
+                        .ok_or_else(|| {
+                            format_err!("Geometry mesh index out of range: {:?}", geometry_mesh_i)
+                        })?;
+                for (&material_i, index_buffer) in mesh
+                    .materials
+                    .iter()
+                    .zip(geometry_mesh.indices_per_material.iter())
+                {
+                    let material = drawable_scene.material(material_i).ok_or_else(|| {
+                        format_err!("Material index out of range: {:?}", material_i)
+                    })?;
+                    let material_desc_set = material
+                        .cache
+                        .uniform_buffer
+                        .as_ref()
+                        .expect("Material uniform buffer should be uploaded");
+                    let texture = material
+                        .diffuse_texture
+                        .map(|diffuse_i| {
+                            drawable_scene.texture(diffuse_i).ok_or_else(|| {
+                                format_err!("Material index out of range: {:?}", material_i)
+                            })
+                        })
+                        .transpose()?;
+                    let texture_desc_set: Arc<dyn DescriptorSet + Send + Sync> = texture
+                        .map_or_else(
+                            || dummy_texture_desc_set.clone(),
+                            |t| {
+                                t.cache
+                                    .descriptor_set
+                                    .as_ref()
+                                    .expect(
+                                        "Descriptor set for texture should be initialized but not",
+                                    )
+                                    .clone()
+                            },
+                        );
+                    let stuff = (
+                        geometry_mesh.vertices.clone(),
+                        index_buffer.clone(),
+                        material_desc_set.clone(),
+                        texture_desc_set,
+                    );
+                    if texture.map_or(false, |t| t.transparent) {
+                        transparent_meshes.push(stuff);
+                    } else {
+                        opaque_meshes.push(stuff);
+                    }
+                }
+            }
+
+            for (vertex, index, material, texture_desc_set) in
+                opaque_meshes.into_iter().chain(transparent_meshes)
             {
-                let builder = AutoCommandBufferBuilder::primary_one_time_submit(
-                    device.clone(),
-                    queue.family(),
-                )
-                .with_context(|e| format_err!("Failed to create command buffer builder: {}", e))?
-                .begin_render_pass(
-                    framebuffers[image_num].clone(),
-                    false,
-                    vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()],
-                )
-                .with_context(|e| format_err!("Failed to begin new render pass creation: {}", e))?;
-                // TODO: Draw scene here.
-                let _ = set0.clone();
-                builder
-                    .end_render_pass()
-                    .with_context(|e| format_err!("Failed to end a render pass creation: {}", e))?
-                    .build()
-                    .with_context(|e| format_err!("Failed to build a new command buffer: {}", e))?
-            };
+                builder = builder
+                    .draw_indexed(
+                        pipeline.clone(),
+                        &DynamicState::none(),
+                        vec![vertex],
+                        index,
+                        (set0.clone(), texture_desc_set.clone(), material.clone()),
+                        (),
+                    )
+                    .with_context(|e| {
+                        format_err!("Failed to add a draw call to command buffer: {}", e)
+                    })?;
+            }
+
+            builder
+                .end_render_pass()
+                .with_context(|e| format_err!("Failed to end a render pass creation: {}", e))?
+                .build()
+                .with_context(|e| format_err!("Failed to build a new command buffer: {}", e))?
+        };
 
         let future = previous_frame
             .join(acquire_future)
@@ -263,7 +375,7 @@ fn window_size_dependent_setup(
         .with_context(|e| format_err!("Failed to create framebuffers: {}", e))?;
 
     let pipeline = GraphicsPipeline::start()
-        .vertex_input(SingleBufferDefinition::<fbx_viewer::drawable::vulkan::Vertex>::new())
+        .vertex_input(SingleBufferDefinition::<drawable::Vertex>::new())
         .vertex_shader(vs.main_entry_point(), ())
         .triangle_list()
         .viewports_dynamic_scissors_irrelevant(1)
@@ -296,6 +408,54 @@ fn window_dimensions(window: &Window) -> Fallible<[u32; 2]> {
         })
         .ok_or_else(|| format_err!("Window no longer exists"))
         .map_err(Into::into)
+}
+
+#[allow(clippy::type_complexity)]
+fn create_dummy_texture(
+    device: Arc<Device>,
+    queue: Arc<Queue>,
+) -> Fallible<(
+    Arc<ImmutableImage<R8G8B8A8Srgb>>,
+    Arc<Sampler>,
+    Box<dyn GpuFuture>,
+)> {
+    let raw_image = [0xffu8; 4];
+    let dim = Dimensions::Dim2d {
+        width: 1,
+        height: 1,
+    };
+    let (image, img_future) =
+        ImmutableImage::from_iter(raw_image.iter().cloned(), dim, R8G8B8A8Srgb, queue)
+            .with_context(|e| format_err!("Failed to upload dummy texture image: {}", e))?;
+    let sampler = Sampler::new(
+        device,
+        Filter::Linear,
+        Filter::Linear,
+        MipmapMode::Nearest,
+        SamplerAddressMode::Repeat,
+        SamplerAddressMode::Repeat,
+        SamplerAddressMode::Repeat,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+    )
+    .with_context(|e| format_err!("Failed to create sampler: {}", e))?;
+
+    Ok((image, sampler, Box::new(img_future)))
+}
+
+fn create_diffuse_texture_desc_set(
+    image: Arc<ImmutableImage<R8G8B8A8Srgb>>,
+    sampler: Arc<Sampler>,
+    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+) -> Fallible<Arc<dyn DescriptorSet + Send + Sync>> {
+    let desc_set = PersistentDescriptorSet::start(pipeline, 1)
+        .add_sampled_image(image.clone(), sampler.clone())
+        .with_context(|e| format_err!("Failed to add sampled image to descriptor set: {}", e))?
+        .build()
+        .with_context(|e| format_err!("Failed to build descriptor set: {}", e))?;
+    Ok(Arc::new(desc_set) as Arc<dyn DescriptorSet + Send + Sync>)
 }
 
 pub mod vs {
