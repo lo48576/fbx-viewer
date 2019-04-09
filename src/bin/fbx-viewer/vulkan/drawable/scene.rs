@@ -5,12 +5,15 @@ use std::sync::Arc;
 use failure::{format_err, Fallible, ResultExt};
 use fbx_viewer::data::{GeometryMeshIndex, MaterialIndex, TextureIndex};
 use vulkano::{
-    descriptor::descriptor_set::PersistentDescriptorSet, pipeline::GraphicsPipelineAbstract,
+    buffer::ImmutableBuffer,
+    descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet},
+    pipeline::GraphicsPipelineAbstract,
     sync::GpuFuture,
 };
 
 use crate::vulkan::{
     drawable::{GeometryMesh, Material, Mesh, Texture},
+    fs::ty::Material as ShaderMaterial,
     setup::create_diffuse_texture_desc_set,
 };
 
@@ -54,14 +57,10 @@ impl Scene {
 
         for material in &mut self.materials {
             material.cache.reset();
-            let uniform_buffer = PersistentDescriptorSet::start(pipeline.clone(), 2)
-                .add_buffer(material.data.clone())
-                .with_context(|e| {
-                    format_err!("Failed to add material data to descriptor set: {}", e)
-                })?
-                .build()
-                .with_context(|e| format_err!("Failed to build material descriptor set: {}", e))?;
-            material.cache.uniform_buffer = Some(Arc::new(uniform_buffer) as Arc<_>);
+            material.cache.uniform_buffer = Some(create_material_desc_set(
+                material.data.clone(),
+                pipeline.clone(),
+            )?);
         }
 
         for texture in &mut self.textures {
@@ -75,4 +74,18 @@ impl Scene {
 
         Ok(future)
     }
+}
+
+/// Creates a descriptor set for the given material uniform buffer.
+fn create_material_desc_set(
+    material_buf: Arc<ImmutableBuffer<ShaderMaterial>>,
+    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+) -> Fallible<Arc<dyn DescriptorSet + Send + Sync>> {
+    let desc_set = PersistentDescriptorSet::start(pipeline.clone(), 2)
+        .add_buffer(material_buf.clone())
+        .with_context(|e| format_err!("Failed to add material data to descriptor set: {}", e))?
+        .build()
+        .with_context(|e| format_err!("Failed to build material descriptor set: {}", e))?;
+
+    Ok(Arc::new(desc_set) as Arc<_>)
 }
