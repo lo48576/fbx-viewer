@@ -4,13 +4,13 @@
 #[derive(Debug, Clone)]
 pub struct GeometryMesh {
     /// Name.
-    pub(crate) name: Option<String>,
+    pub name: Option<String>,
     /// Positions.
-    pub(crate) positions: Vec<[f32; 3]>,
+    pub positions: Vec<[f32; 3]>,
     /// Normals.
-    pub(crate) normals: Vec<[f32; 3]>,
+    pub normals: Vec<[f32; 3]>,
     /// UV.
-    pub(crate) uv: Vec<[f32; 2]>,
+    pub uv: Vec<[f32; 2]>,
     /// Indices per materials.
-    pub(crate) indices_per_material: Vec<Vec<u32>>,
+    pub indices_per_material: Vec<Vec<u32>>,
 }

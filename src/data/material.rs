@@ -6,11 +6,11 @@ use crate::data::TextureIndex;
 #[derive(Debug, Clone)]
 pub struct Material {
     /// Name.
-    pub(crate) name: Option<String>,
+    pub name: Option<String>,
     /// Texture index.
-    pub(crate) diffuse_texture: Option<TextureIndex>,
+    pub diffuse_texture: Option<TextureIndex>,
     /// Shading parameters.
-    pub(crate) data: ShadingData,
+    pub data: ShadingData,
 }
 
 /// Shading data.
@@ -24,9 +24,9 @@ pub enum ShadingData {
 #[derive(Debug, Clone, Copy)]
 pub struct LambertData {
     /// Ambient.
-    pub(crate) ambient: [f32; 3],
+    pub ambient: [f32; 3],
     /// Diffuse.
-    pub(crate) diffuse: [f32; 3],
+    pub diffuse: [f32; 3],
     /// Emissive.
-    pub(crate) emissive: [f32; 3],
+    pub emissive: [f32; 3],
 }

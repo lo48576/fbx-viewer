@@ -8,17 +8,17 @@ use image::DynamicImage;
 #[derive(Clone)]
 pub struct Texture {
     /// Name.
-    pub(crate) name: Option<String>,
+    pub name: Option<String>,
     /// Image.
-    pub(crate) image: DynamicImage,
+    pub image: DynamicImage,
     /// Whether the texture can be transparent.
     ///
     /// If `false`, the texture can be assumed to have no transparent texels.
-    pub(crate) transparent: bool,
+    pub transparent: bool,
     /// Wrap mode for U axis.
-    pub(crate) wrap_mode_u: WrapMode,
+    pub wrap_mode_u: WrapMode,
     /// Wrap mode for V axis.
-    pub(crate) wrap_mode_v: WrapMode,
+    pub wrap_mode_v: WrapMode,
 }
 
 impl fmt::Debug for Texture {

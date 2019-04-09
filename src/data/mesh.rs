@@ -6,11 +6,11 @@ use crate::data::{GeometryMeshIndex, MaterialIndex};
 #[derive(Debug, Clone)]
 pub struct Mesh {
     /// Name.
-    pub(crate) name: Option<String>,
+    pub name: Option<String>,
     /// Geometry mesh index.
-    pub(crate) geometry_mesh_index: GeometryMeshIndex,
+    pub geometry_mesh_index: GeometryMeshIndex,
     /// Materials.
-    pub(crate) materials: Vec<MaterialIndex>,
+    pub materials: Vec<MaterialIndex>,
 }
 
 impl Mesh {
