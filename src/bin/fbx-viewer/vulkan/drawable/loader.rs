@@ -50,7 +50,13 @@ impl Loader {
                 .positions
                 .iter()
                 .zip(src_geometry.normals.iter())
-                .zip(src_geometry.uv.iter())
+                .zip(
+                    src_geometry
+                        .uv
+                        .iter()
+                        .flat_map(|v| v)
+                        .chain(std::iter::repeat(&[0.5; 2])),
+                )
                 .map(|((&position, &normal), &uv)| drawable::Vertex {
                     position,
                     normal,

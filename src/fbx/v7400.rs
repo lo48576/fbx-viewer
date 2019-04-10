@@ -124,25 +124,27 @@ impl<'a> Loader<'a> {
                 .collect::<Result<Vec<_>, _>>()
                 .with_context(|e| format_err!("Failed to reconstruct normals vertices: {}", e))?
         };
-        let uv = {
-            let uv = layer
-                .layer_element_entries()
-                .filter_map(|entry| match entry.typed_layer_element() {
-                    Ok(TypedLayerElementHandle::Uv(handle)) => Some(handle),
-                    _ => None,
-                })
-                .next()
-                .ok_or_else(|| format_err!("Failed to get UV"))?
-                .uv()?;
-            triangle_pvi_indices
-                .triangle_vertex_indices()
-                .map(|tri_vi| {
-                    uv.uv(&triangle_pvi_indices, tri_vi)
-                        .map(|p| [p.x as f32, p.y as f32])
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .with_context(|e| format_err!("Failed to reconstruct UV vertices: {}", e))?
-        };
+        let uv = layer
+            .layer_element_entries()
+            .filter_map(|entry| match entry.typed_layer_element() {
+                Ok(TypedLayerElementHandle::Uv(handle)) => Some(handle),
+                _ => None,
+            })
+            .next()
+            .map(|handle| handle.uv())
+            .transpose()
+            .with_context(|e| format_err!("Failed to get UV data: {}", e))?
+            .map(|uv| {
+                triangle_pvi_indices
+                    .triangle_vertex_indices()
+                    .map(|tri_vi| {
+                        uv.uv(&triangle_pvi_indices, tri_vi)
+                            .map(|p| [p.x as f32, p.y as f32])
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()
+            .with_context(|e| format_err!("Failed to reconstruct UV vertices: {}", e))?;
 
         let indices_per_material = {
             let mut indices_per_material = vec![Vec::new(); num_materials];
@@ -184,12 +186,14 @@ impl<'a> Loader<'a> {
                 normals.len()
             );
         }
-        if positions.len() != uv.len() {
-            bail!(
-                "Vertices length mismatch: positions.len={:?}, uv.len={:?}",
-                positions.len(),
-                uv.len()
-            );
+        if let Some(uv_len) = uv.as_ref().map(Vec::len) {
+            if positions.len() != uv_len {
+                bail!(
+                    "Vertices length mismatch: positions.len={:?}, uv.len={:?}",
+                    positions.len(),
+                    uv_len
+                );
+            }
         }
 
         let mesh = GeometryMesh {

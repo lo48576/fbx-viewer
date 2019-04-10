@@ -14,7 +14,7 @@ pub struct GeometryMesh {
     /// Normals.
     pub normals: Vec<[f32; 3]>,
     /// UV.
-    pub uv: Vec<[f32; 2]>,
+    pub uv: Option<Vec<[f32; 2]>>,
     /// Indices per materials.
     pub indices_per_material: Vec<Vec<u32>>,
 }
