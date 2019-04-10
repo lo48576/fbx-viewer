@@ -1,23 +1,22 @@
 //! FBX v7400 support.
 
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::Path,
-};
+use std::{collections::HashMap, path::Path};
 
-use failure::{format_err, Fallible, ResultExt};
+use failure::{bail, format_err, Fallible, ResultExt};
 use fbxcel_dom::v7400::{
-    data::{mesh::layer::TypedLayerElementHandle, texture::WrapMode},
-    object::{
-        model::{self, TypedModelHandle},
-        ObjectId, TypedObjectHandle,
+    data::{
+        material::ShadingModel, mesh::layer::TypedLayerElementHandle,
+        texture::WrapMode as RawWrapMode,
     },
+    object::{self, model::TypedModelHandle, ObjectId, TypedObjectHandle},
     Document,
 };
 use log::{debug, trace};
-use vulkano::sampler::SamplerAddressMode;
 
-use crate::data::{mesh::Vertex, Mesh, Model, Scene, SubMesh, Texture, TextureId};
+use crate::data::{
+    GeometryMesh, GeometryMeshIndex, LambertData, Material, MaterialIndex, Mesh, MeshIndex, Scene,
+    ShadingData, Texture, TextureIndex, WrapMode,
+};
 
 use self::triangulator::triangulator;
 
@@ -25,261 +24,374 @@ mod triangulator;
 
 /// Loads the data from the document.
 pub fn from_doc(doc: Box<Document>) -> Fallible<Scene> {
-    let mut mesh_objs = HashMap::new();
+    Loader::new(&doc).load()
+}
 
-    for obj in doc.objects() {
-        if let TypedObjectHandle::Model(TypedModelHandle::Mesh(mesh)) = obj.get_typed() {
-            mesh_objs.insert(mesh.object_id(), mesh);
+/// FBX data loader.
+pub struct Loader<'a> {
+    /// Document.
+    doc: &'a Document,
+    /// Scene.
+    scene: Scene,
+    /// Geometry mesh indices.
+    geometry_mesh_indices: HashMap<ObjectId, GeometryMeshIndex>,
+    /// Material indices.
+    material_indices: HashMap<ObjectId, MaterialIndex>,
+    /// Mesh indices.
+    mesh_indices: HashMap<ObjectId, MeshIndex>,
+    /// Texture indices.
+    texture_indices: HashMap<ObjectId, TextureIndex>,
+}
+
+impl<'a> Loader<'a> {
+    /// Creates a new `Loader`.
+    fn new(doc: &'a Document) -> Self {
+        Self {
+            doc,
+            scene: Default::default(),
+            geometry_mesh_indices: Default::default(),
+            material_indices: Default::default(),
+            mesh_indices: Default::default(),
+            texture_indices: Default::default(),
         }
     }
 
-    let mut scene = Scene::new();
-
-    let mut models = HashMap::<ObjectId, (Option<String>, Vec<Mesh>)>::new();
-    let mut textures = HashMap::<TextureId, Texture>::new();
-
-    // Load meshes.
-    // TODO: support instantiation (geometry sharing among different models).
-    for (_mesh_id, mesh_obj) in mesh_objs {
-        debug!(
-            "Loading mesh: name={:?}, object_id={:?}",
-            mesh_obj.name(),
-            mesh_obj.object_id()
-        );
-        let root_model = {
-            let mut current: model::ModelHandle = *mesh_obj;
-            while let Some(parent) = current.parent_model() {
-                current = *parent;
+    /// Loads the document.
+    fn load(mut self) -> Fallible<Scene> {
+        for obj in self.doc.objects() {
+            if let TypedObjectHandle::Model(TypedModelHandle::Mesh(mesh)) = obj.get_typed() {
+                self.load_mesh(mesh)?;
             }
-            current
-        };
-        debug!(
-            "Root model of mesh {:?}: name={:?}, object_id={:?}",
-            mesh_obj.object_id(),
-            root_model.name(),
-            root_model.object_id()
-        );
+        }
 
-        let mesh: Mesh = {
-            let geometry = mesh_obj
-                .geometry()
-                .with_context(|e| format_err!("Failed to get geometry: {}", e))?;
-            trace!("Geometry ID: {:?}", geometry.object_id());
-            // Mesh.
-            let control_points = geometry
-                .control_points()
-                .with_context(|e| format_err!("Failed to get control points: {}", e))?;
-            let polygon_vertex_indices = geometry
-                .polygon_vertex_indices()
-                .with_context(|e| format_err!("Failed to get polygon vertices: {}", e))?;
-            let triangle_pvi_indices = polygon_vertex_indices
-                .triangulate_each(&control_points, triangulator)
-                .with_context(|e| format_err!("Triangulation failed: {}", e))?;
-            let positions = triangle_pvi_indices
-                .iter_control_point_indices()
-                .map(|cpi| {
-                    let cpi =
-                        cpi.ok_or_else(|| format_err!("Failed to get control point index"))?;
-                    control_points
-                        .get_cp_f32(cpi)
-                        .ok_or_else(|| format_err!("Failed to get control point"))
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .with_context(|e| format_err!("Failed to reconstruct position vertices: {}", e))?;
-            let layer = geometry
-                .layers()
-                .next()
-                .ok_or_else(|| format_err!("Failed to get layer"))?;
-            let normals = {
-                let normals = layer
-                    .layer_element_entries()
-                    .filter_map(|entry| match entry.typed_layer_element() {
-                        Ok(TypedLayerElementHandle::Normal(handle)) => Some(handle),
-                        _ => None,
-                    })
-                    .next()
-                    .ok_or_else(|| format_err!("Failed to get normals"))?
-                    .normals()?;
-                triangle_pvi_indices
-                    .triangle_vertex_indices()
-                    .map(|tri_vi| normals.get_xyz_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
-                    .collect::<Result<Vec<_>, _>>()
-                    .with_context(|e| {
-                        format_err!("Failed to reconstruct normals vertices: {}", e)
-                    })?
-            };
-            let uv = {
-                let uv = layer
-                    .layer_element_entries()
-                    .filter_map(|entry| match entry.typed_layer_element() {
-                        Ok(TypedLayerElementHandle::Uv(handle)) => Some(handle),
-                        _ => None,
-                    })
-                    .next()
-                    .ok_or_else(|| format_err!("Failed to get UV"))?
-                    .uv()?;
-                triangle_pvi_indices
-                    .triangle_vertex_indices()
-                    .map(|tri_vi| uv.get_uv_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
-                    .collect::<Result<Vec<_>, _>>()
-                    .with_context(|e| format_err!("Failed to reconstruct UV vertices: {}", e))?
-            };
-            let material_indices = {
-                let materials = layer
-                    .layer_element_entries()
-                    .filter_map(|entry| match entry.typed_layer_element() {
-                        Ok(TypedLayerElementHandle::Material(handle)) => Some(handle),
-                        _ => None,
-                    })
-                    .next()
-                    .ok_or_else(|| format_err!("Materials not found for mesh {:?}", mesh_obj))?
-                    .materials()
-                    .with_context(|e| format_err!("Failed to get materials: {}", e))?;
-                triangle_pvi_indices
-                    .triangle_vertex_indices()
-                    .map(|tri_vi| {
-                        materials.get_material_index_by_tri_vi(&triangle_pvi_indices, tri_vi)
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    .with_context(|e| {
-                        format_err!("Failed to reconstruct material indices: {}", e)
-                    })?
-            };
-            trace!("vertices len: {:?}", positions.len());
-            let vertices = positions
-                .into_iter()
-                .zip(normals)
-                .zip(uv)
-                .zip(material_indices.iter().map(|i| i.get_u32()))
-                .map(|(((position, normal), uv), material)| Vertex {
-                    position,
-                    normal,
-                    uv,
-                    material,
-                })
-                .collect();
-
-            // Load texture.
-            let texture_ids = {
-                let mut ids = Vec::new();
-                for material_obj in mesh_obj.materials() {
-                    trace!("Material {}: {:?}", ids.len(), material_obj);
-                    let texture_obj_opt = material_obj
-                        .transparent_texture()
-                        .map(|v| (true, v))
-                        .or_else(|| material_obj.diffuse_texture().map(|v| (false, v)));
-                    let (transparent, texture_obj) = match texture_obj_opt {
-                        Some(v) => v,
-                        None => {
-                            trace!("No texture object for material {:?}", material_obj);
-                            ids.push(None);
-                            continue;
-                        }
-                    };
-                    let wrap_mode_u = {
-                        let val = texture_obj
-                            .properties()
-                            .wrap_mode_u_or_default()
-                            .with_context(|e| format_err!("Failed to load wrap mode U: {}", e))?;
-                        match val {
-                            WrapMode::Repeat => SamplerAddressMode::Repeat,
-                            WrapMode::Clamp => SamplerAddressMode::ClampToEdge,
-                        }
-                    };
-                    let wrap_mode_v = {
-                        let val = texture_obj
-                            .properties()
-                            .wrap_mode_v_or_default()
-                            .with_context(|e| format_err!("Failed to load wrap mode V: {}", e))?;
-                        match val {
-                            WrapMode::Repeat => SamplerAddressMode::Repeat,
-                            WrapMode::Clamp => SamplerAddressMode::ClampToEdge,
-                        }
-                    };
-                    let name = texture_obj.name();
-                    let video_clip_obj = texture_obj
-                        .video_clip()
-                        .ok_or_else(|| {
-                            format_err!("No image data for texture object: {:?}", texture_obj)
-                        })
-                        .with_context(|e| format_err!("Failed to get video clip object: {}", e))?;
-                    trace!("Video clip object found: {:?}", video_clip_obj);
-
-                    let tex_id = TextureId(video_clip_obj.object_id().raw());
-                    ids.push(Some(tex_id));
-
-                    let entry = match textures.entry(tex_id) {
-                        std::collections::hash_map::Entry::Occupied(_) => continue,
-                        std::collections::hash_map::Entry::Vacant(entry) => entry,
-                    };
-                    trace!("Not cached, loading texture");
-                    let file_ext = Path::new(video_clip_obj.relative_filename()?)
-                        .extension()
-                        .and_then(|s| s.to_str())
-                        .map(|s| s.to_ascii_lowercase());
-                    trace!("filename: {:?}", video_clip_obj.relative_filename()?);
-                    let content = video_clip_obj
-                        .content()
-                        .ok_or_else(|| format_err!("Currently, only embedded texture is supported"))
-                        .with_context(|e| format_err!("Failed to get texture image: {}", e))?;
-                    let image = match file_ext.as_ref().map(AsRef::as_ref) {
-                        Some("tga") => {
-                            image::load_from_memory_with_format(content, image::ImageFormat::TGA)
-                                .with_context(|e| format_err!("Failed to load TGA image: {}", e))?
-                        }
-                        _ => image::load_from_memory(content)
-                            .with_context(|e| format_err!("Failed to load image: {}", e))?,
-                    };
-                    entry.insert(Texture {
-                        name: name.map(Into::into),
-                        data: image,
-                        transparent,
-                        wrap_mode_u,
-                        wrap_mode_v,
-                    });
-                }
-                ids
-            };
-
-            // Create submeshes.
-            let mut submeshes = BTreeMap::new();
-            assert_eq!(triangle_pvi_indices.len(), material_indices.len());
-            // Split meshes.
-            for (pvii, &material_i) in material_indices.iter().enumerate() {
-                submeshes
-                    .entry(material_i)
-                    .or_insert_with(Vec::new)
-                    .push(pvii as u32);
-            }
-            let submeshes = submeshes
-                .into_iter()
-                .map(|(material_index, indices)| SubMesh {
-                    material_index: material_index.get_u32(),
-                    texture_id: texture_ids[material_index.get_u32() as usize],
-                    indices,
-                })
-                .collect();
-
-            Mesh {
-                name: mesh_obj.name().map(Into::into),
-                vertices,
-                submeshes,
-            }
-        };
-
-        models
-            .entry(root_model.object_id())
-            .or_insert_with(|| (root_model.name().map(Into::into), Vec::new()))
-            .1
-            .push(mesh);
+        Ok(self.scene)
     }
 
-    scene.models = models
-        .into_iter()
-        .map(|(_, (name, meshes))| Model { name, meshes })
-        .collect();
+    /// Loads the geometry.
+    fn load_geometry_mesh(
+        &mut self,
+        mesh_obj: object::geometry::MeshHandle<'a>,
+        num_materials: usize,
+    ) -> Fallible<GeometryMeshIndex> {
+        if let Some(index) = self.geometry_mesh_indices.get(&mesh_obj.object_id()) {
+            return Ok(*index);
+        }
 
-    scene.textures = textures;
+        debug!("Loading geometry mesh: {:?}", mesh_obj);
 
-    Ok(scene)
+        let control_points = mesh_obj
+            .control_points()
+            .with_context(|e| format_err!("Failed to get control points: {}", e))?;
+        let polygon_vertices = mesh_obj
+            .polygon_vertex_indices()
+            .with_context(|e| format_err!("Failed to get polygon vertices: {}", e))?;
+        let triangle_pvi_indices = polygon_vertices
+            .triangulate_each(&control_points, triangulator)
+            .with_context(|e| format_err!("Triangulation failed: {}", e))?;
+
+        let positions = triangle_pvi_indices
+            .iter_control_point_indices()
+            .map(|cpi| {
+                let cpi = cpi.ok_or_else(|| format_err!("Failed to get control point index"))?;
+                control_points
+                    .get_cp_f32(cpi)
+                    .ok_or_else(|| format_err!("Failed to get control point"))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .with_context(|e| format_err!("Failed to reconstruct position vertices: {}", e))?;
+        trace!("Expanded positions len: {:?}", positions.len());
+
+        let layer = mesh_obj
+            .layers()
+            .next()
+            .ok_or_else(|| format_err!("Failed to get layer"))?;
+
+        let normals = {
+            let normals = layer
+                .layer_element_entries()
+                .filter_map(|entry| match entry.typed_layer_element() {
+                    Ok(TypedLayerElementHandle::Normal(handle)) => Some(handle),
+                    _ => None,
+                })
+                .next()
+                .ok_or_else(|| format_err!("Failed to get normals"))?
+                .normals()?;
+            triangle_pvi_indices
+                .triangle_vertex_indices()
+                .map(|tri_vi| normals.get_xyz_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|e| format_err!("Failed to reconstruct normals vertices: {}", e))?
+        };
+        let uv = {
+            let uv = layer
+                .layer_element_entries()
+                .filter_map(|entry| match entry.typed_layer_element() {
+                    Ok(TypedLayerElementHandle::Uv(handle)) => Some(handle),
+                    _ => None,
+                })
+                .next()
+                .ok_or_else(|| format_err!("Failed to get UV"))?
+                .uv()?;
+            triangle_pvi_indices
+                .triangle_vertex_indices()
+                .map(|tri_vi| uv.get_uv_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|e| format_err!("Failed to reconstruct UV vertices: {}", e))?
+        };
+
+        let indices_per_material = {
+            let mut indices_per_material = vec![Vec::new(); num_materials];
+            let materials = layer
+                .layer_element_entries()
+                .filter_map(|entry| match entry.typed_layer_element() {
+                    Ok(TypedLayerElementHandle::Material(handle)) => Some(handle),
+                    _ => None,
+                })
+                .next()
+                .ok_or_else(|| format_err!("Materials not found for mesh {:?}", mesh_obj))?
+                .materials()
+                .with_context(|e| format_err!("Failed to get materials: {}", e))?;
+            for tri_vi in triangle_pvi_indices.triangle_vertex_indices() {
+                let local_material_index = materials
+                    .get_material_index_by_tri_vi(&triangle_pvi_indices, tri_vi)
+                    .with_context(|e| {
+                        format_err!("Failed to get mesh-local material index: {}", e)
+                    })?
+                    .to_u32();
+                indices_per_material
+                    .get_mut(local_material_index as usize)
+                    .ok_or_else(|| {
+                        format_err!(
+                            "Mesh-local material index out of range: num_materials={:?}, got={:?}",
+                            num_materials,
+                            local_material_index
+                        )
+                    })?
+                    .push(tri_vi.to_usize() as u32);
+            }
+            indices_per_material
+        };
+
+        if positions.len() != normals.len() {
+            bail!(
+                "Vertices length mismatch: positions.len={:?}, normals.len={:?}",
+                positions.len(),
+                normals.len()
+            );
+        }
+        if positions.len() != uv.len() {
+            bail!(
+                "Vertices length mismatch: positions.len={:?}, uv.len={:?}",
+                positions.len(),
+                uv.len()
+            );
+        }
+
+        let mesh = GeometryMesh {
+            name: mesh_obj.name().map(Into::into),
+            positions,
+            normals,
+            uv,
+            indices_per_material,
+        };
+
+        debug!("Successfully loaded geometry mesh: {:?}", mesh_obj);
+
+        Ok(self.scene.add_geometry_mesh(mesh))
+    }
+
+    /// Loads the material.
+    fn load_material(
+        &mut self,
+        material_obj: object::material::MaterialHandle<'a>,
+    ) -> Fallible<MaterialIndex> {
+        if let Some(index) = self.material_indices.get(&material_obj.object_id()) {
+            return Ok(*index);
+        }
+
+        debug!("Loading material: {:?}", material_obj);
+
+        let diffuse_texture = material_obj
+            .transparent_texture()
+            .map(|v| (true, v))
+            .or_else(|| material_obj.diffuse_texture().map(|v| (false, v)))
+            .map(|(transparent, texture_obj)| {
+                self.load_texture(texture_obj, transparent)
+                    .with_context(|e| format_err!("Failed to load diffuse texture: {}", e))
+            })
+            .transpose()?;
+
+        let properties = material_obj.properties();
+        let shading_data = match properties
+            .shading_model_or_default()
+            .with_context(|e| format_err!("Failed to get shading model: {}", e))?
+        {
+            ShadingModel::Lambert | ShadingModel::Phong => {
+                let ambient_color = properties
+                    .ambient_color_or_default()
+                    .with_context(|e| format_err!("Failed to get ambient color: {}", e))?;
+                let ambient_factor = properties
+                    .ambient_factor_or_default()
+                    .with_context(|e| format_err!("Failed to get ambient factor: {}", e))?;
+                let ambient_color = [
+                    (ambient_color[0] * ambient_factor) as f32,
+                    (ambient_color[1] * ambient_factor) as f32,
+                    (ambient_color[2] * ambient_factor) as f32,
+                ];
+                let diffuse_color = properties
+                    .diffuse_color_or_default()
+                    .with_context(|e| format_err!("Failed to get diffuse color: {}", e))?;
+                let diffuse_factor = properties
+                    .diffuse_factor_or_default()
+                    .with_context(|e| format_err!("Failed to get diffuse factor: {}", e))?;
+                let diffuse_color = [
+                    (diffuse_color[0] * diffuse_factor) as f32,
+                    (diffuse_color[1] * diffuse_factor) as f32,
+                    (diffuse_color[2] * diffuse_factor) as f32,
+                ];
+                let emissive_color = properties
+                    .emissive_color_or_default()
+                    .with_context(|e| format_err!("Failed to get emissive color: {}", e))?;
+                let emissive_factor = properties
+                    .emissive_factor_or_default()
+                    .with_context(|e| format_err!("Failed to get emissive factor: {}", e))?;
+                let emissive_color = [
+                    (emissive_color[0] * emissive_factor) as f32,
+                    (emissive_color[1] * emissive_factor) as f32,
+                    (emissive_color[2] * emissive_factor) as f32,
+                ];
+                ShadingData::Lambert(LambertData {
+                    ambient: ambient_color,
+                    diffuse: diffuse_color,
+                    emissive: emissive_color,
+                })
+            }
+            v => bail!("Unknown shading model: {:?}", v),
+        };
+
+        let material = Material {
+            name: material_obj.name().map(Into::into),
+            diffuse_texture,
+            data: shading_data,
+        };
+
+        debug!("Successfully loaded material: {:?}", material_obj);
+
+        Ok(self.scene.add_material(material))
+    }
+
+    /// Loads the mesh.
+    fn load_mesh(&mut self, mesh_obj: object::model::MeshHandle<'a>) -> Fallible<MeshIndex> {
+        if let Some(index) = self.mesh_indices.get(&mesh_obj.object_id()) {
+            return Ok(*index);
+        }
+
+        debug!("Loading mesh: {:?}", mesh_obj);
+
+        let geometry_obj = mesh_obj
+            .geometry()
+            .with_context(|e| format_err!("Failed to get geometry: {}", e))?;
+
+        let materials = mesh_obj
+            .materials()
+            .map(|material_obj| self.load_material(material_obj))
+            .collect::<Fallible<Vec<_>>>()
+            .with_context(|e| format_err!("Failed to load materials for mesh: {}", e))?;
+
+        let geometry_index = self
+            .load_geometry_mesh(geometry_obj, materials.len())
+            .with_context(|e| format_err!("Failed to load geometry mesh: {}", e))?;
+
+        let mesh = Mesh {
+            name: mesh_obj.name().map(Into::into),
+            geometry_mesh_index: geometry_index,
+            materials,
+        };
+
+        debug!("Successfully loaded mesh: {:?}", mesh_obj);
+
+        Ok(self.scene.add_mesh(mesh))
+    }
+
+    /// Loads the texture.
+    fn load_texture(
+        &mut self,
+        texture_obj: object::texture::TextureHandle<'a>,
+        transparent: bool,
+    ) -> Fallible<TextureIndex> {
+        if let Some(index) = self.texture_indices.get(&texture_obj.object_id()) {
+            return Ok(*index);
+        }
+
+        debug!("Loading texture: {:?}", texture_obj);
+
+        let properties = texture_obj.properties();
+        let wrap_mode_u = {
+            let val = properties
+                .wrap_mode_u_or_default()
+                .with_context(|e| format_err!("Failed to load wrap mode for U axis: {}", e))?;
+            match val {
+                RawWrapMode::Repeat => WrapMode::Repeat,
+                RawWrapMode::Clamp => WrapMode::ClampToEdge,
+            }
+        };
+        let wrap_mode_v = {
+            let val = properties
+                .wrap_mode_v_or_default()
+                .with_context(|e| format_err!("Failed to load wrap mode for V axis: {}", e))?;
+            match val {
+                RawWrapMode::Repeat => WrapMode::Repeat,
+                RawWrapMode::Clamp => WrapMode::ClampToEdge,
+            }
+        };
+        let video_clip_obj = texture_obj
+            .video_clip()
+            .ok_or_else(|| format_err!("No image data for texture object: {:?}", texture_obj))?;
+        let image = self
+            .load_video_clip(video_clip_obj)
+            .with_context(|e| format_err!("Failed to load texture image: {}", e))?;
+
+        let texture = Texture {
+            name: texture_obj.name().map(Into::into),
+            image,
+            transparent,
+            wrap_mode_u,
+            wrap_mode_v,
+        };
+
+        debug!("Successfully loaded texture: {:?}", texture_obj);
+
+        Ok(self.scene.add_texture(texture))
+    }
+
+    /// Loads the texture image.
+    fn load_video_clip(
+        &mut self,
+        video_clip_obj: object::video::ClipHandle<'a>,
+    ) -> Fallible<image::DynamicImage> {
+        debug!("Loading texture image: {:?}", video_clip_obj);
+
+        let relative_filename = video_clip_obj.relative_filename().with_context(|e| {
+            format_err!("Failed to get relative filename of texture image: {}", e)
+        })?;
+        trace!("Relative filename: {:?}", relative_filename);
+        let file_ext = Path::new(&relative_filename)
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_ascii_lowercase());
+        trace!("File extension: {:?}", file_ext);
+        let content = video_clip_obj
+            .content()
+            .ok_or_else(|| format_err!("Currently, only embedded texture is supported"))?;
+        let image = match file_ext.as_ref().map(AsRef::as_ref) {
+            Some("tga") => image::load_from_memory_with_format(content, image::ImageFormat::TGA)
+                .with_context(|e| format_err!("Failed to load TGA image: {}", e))?,
+            _ => image::load_from_memory(content)
+                .with_context(|e| format_err!("Failed to load image: {}", e))?,
+        };
+
+        debug!("Successfully loaded texture image: {:?}", video_clip_obj);
+
+        Ok(image)
+    }
 }

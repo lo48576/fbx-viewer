@@ -1,13 +1,15 @@
 //! 3D content data.
 
 pub use self::{
-    mesh::{Mesh, SubMesh},
-    model::Model,
-    scene::Scene,
-    texture::{Texture, TextureId},
+    geometry::GeometryMesh,
+    material::{LambertData, Material, ShadingData},
+    mesh::Mesh,
+    scene::{GeometryMeshIndex, MaterialIndex, MeshIndex, Scene, TextureIndex},
+    texture::{Texture, WrapMode},
 };
 
-pub mod mesh;
-mod model;
+mod geometry;
+mod material;
+mod mesh;
 mod scene;
 mod texture;

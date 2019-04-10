@@ -1,40 +1,21 @@
 //! Mesh.
 
-use crate::data::texture::TextureId;
+use crate::data::{GeometryMeshIndex, MaterialIndex};
 
 /// Mesh.
 #[derive(Debug, Clone)]
 pub struct Mesh {
     /// Name.
     pub name: Option<String>,
-    /// Vertices.
-    pub vertices: Vec<Vertex>,
-    /// Submeshes.
-    pub submeshes: Vec<SubMesh>,
+    /// Geometry mesh index.
+    pub geometry_mesh_index: GeometryMeshIndex,
+    /// Materials.
+    pub materials: Vec<MaterialIndex>,
 }
 
-/// Sub mesh.
-#[derive(Debug, Clone)]
-pub struct SubMesh {
-    /// Material index.
-    pub material_index: u32,
-    /// Texture ID.
-    pub texture_id: Option<TextureId>,
-    /// Indices.
-    pub indices: Vec<u32>,
+impl Mesh {
+    /// Returns geometry mesh index.
+    pub fn geometry_mesh_index(&self) -> GeometryMeshIndex {
+        self.geometry_mesh_index
+    }
 }
-
-/// Vertex.
-#[derive(Debug, Clone, Copy)]
-pub struct Vertex {
-    /// Position.
-    pub position: [f32; 3],
-    /// Normal.
-    pub normal: [f32; 3],
-    /// UV.
-    pub uv: [f32; 2],
-    /// Material.
-    pub material: u32,
-}
-
-vulkano::impl_vertex!(Vertex, position, normal, uv, material);
