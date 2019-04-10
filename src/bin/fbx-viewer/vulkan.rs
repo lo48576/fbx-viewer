@@ -93,6 +93,8 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
             .load(&scene)
             .with_context(|e| format_err!("Failed to load scene as drawable data: {}", e))?;
     drop(scene);
+    let scene_bbox = drawable_scene.bbox();
+    info!("Scene bounding box = {:?}", scene_bbox);
     if let Some(future) = drawable_scene_future {
         previous_frame = Box::new(previous_frame.join(future));
     }
