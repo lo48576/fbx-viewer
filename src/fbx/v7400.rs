@@ -157,7 +157,7 @@ impl<'a> Loader<'a> {
                     .with_context(|e| {
                         format_err!("Failed to get mesh-local material index: {}", e)
                     })?
-                    .get_u32();
+                    .to_u32();
                 indices_per_material
                     .get_mut(local_material_index as usize)
                     .ok_or_else(|| {
@@ -167,7 +167,7 @@ impl<'a> Loader<'a> {
                             local_material_index
                         )
                     })?
-                    .push(tri_vi.get() as u32);
+                    .push(tri_vi.to_usize() as u32);
             }
             indices_per_material
         };
