@@ -78,10 +78,12 @@ impl Loader {
                 })
                 .collect::<Fallible<Vec<_>>>()
                 .with_context(|e| format_err!("Failed to upload index buffers: {}", e))?;
+            let bounding_box = src_geometry.bbox_mesh();
             let geometry = drawable::GeometryMesh {
                 name: src_geometry.name.clone(),
                 vertices,
                 indices_per_material,
+                bounding_box,
             };
             scene.geometry_meshes.push(geometry);
         }

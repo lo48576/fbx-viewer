@@ -3,7 +3,10 @@
 use std::sync::Arc;
 
 use failure::{format_err, Fallible, ResultExt};
-use fbx_viewer::data::{GeometryMeshIndex, MaterialIndex, TextureIndex};
+use fbx_viewer::{
+    data::{GeometryMeshIndex, MaterialIndex, TextureIndex},
+    util::bbox::OptionalBoundingBox3d,
+};
 use vulkano::{
     buffer::ImmutableBuffer,
     descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet},
@@ -46,6 +49,14 @@ impl Scene {
     /// Returns a reference to the texture.
     pub fn texture(&self, i: TextureIndex) -> Option<&Texture> {
         self.textures.get(i.to_usize())
+    }
+
+    /// Returns bounding box of all geometries.
+    pub fn bbox(&self) -> OptionalBoundingBox3d<f32> {
+        self.geometry_meshes
+            .iter()
+            .map(|gm| &gm.bounding_box)
+            .collect()
     }
 
     /// Reset and initialize caches with the given pipeline.
