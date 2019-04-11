@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use cgmath::{Matrix3, Matrix4, Point3, Rad, Vector3};
+use cgmath::{Matrix3, Matrix4, Point3, Quaternion, Rad, Vector3};
 use failure::{bail, format_err, Fallible, ResultExt};
 use fbx_viewer::{fbx, CliOpt};
-use log::{error, info, trace};
+use log::{debug, error, info, trace};
 use vulkano::{
     buffer::{BufferUsage, CpuBufferPool},
     command_buffer::{AutoCommandBufferBuilder, DynamicState},
@@ -93,7 +93,10 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
             .load(&scene)
             .with_context(|e| format_err!("Failed to load scene as drawable data: {}", e))?;
     drop(scene);
-    let scene_bbox = drawable_scene.bbox();
+    let scene_bbox = drawable_scene
+        .bbox()
+        .bounding_box()
+        .ok_or_else(|| format_err!("No data to show (bounding box is `None`)"))?;
     info!("Scene bounding box = {:?}", scene_bbox);
     if let Some(future) = drawable_scene_future {
         previous_frame = Box::new(previous_frame.join(future));
@@ -109,6 +112,19 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
         dummy_texture_sampler.clone(),
         pipeline.clone(),
     )?;
+
+    let camera = {
+        use cgmath::{EuclideanSpace, Rotation};
+
+        let center = Point3::centroid(&[scene_bbox.min(), scene_bbox.max()]).map(Into::into);
+        debug!("Center calculated from bounding box: {:?}", center);
+        let size: Vector3<f64> = (scene_bbox.max() - scene_bbox.min()).map(Into::into);
+        let distance = size.x.max(size.y);
+        let posture = Quaternion::look_at(Vector3::unit_z(), -Vector3::unit_y());
+        Camera::with_center_distance_posture(center, distance, posture)
+    };
+    debug!("Initial camera = {:?}", camera);
+    debug!("Center calculated from camera = {:?}", camera.center());
 
     let rotation_start = std::time::Instant::now();
 
@@ -160,17 +176,16 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
             let rotation = Matrix3::from_angle_y(Rad(rotation as f32));
 
             let aspect_ratio = dimensions[0] as f32 / dimensions[1] as f32;
-            let proj =
-                cgmath::perspective(Rad(std::f32::consts::FRAC_PI_2), aspect_ratio, 0.01, 100.0);
-            let eye = Point3::new(0.0, 0.5, -1.5);
-            let center = Point3::new(0.0, 1.0, 0.0);
-            let up = Vector3::new(0.0, -1.0, 0.0);
-            let view = Matrix4::look_at(eye, center, up);
-            let scale = Matrix4::from_scale(0.01);
 
+            let proj =
+                cgmath::perspective(Rad(std::f32::consts::FRAC_PI_3), aspect_ratio, 0.1, 1000.0);
+            let view: Matrix4<f32> = camera
+                .view()
+                .cast()
+                .ok_or_else(|| format_err!("Abnormal camera posture: {:?}", camera))?;
             let uniform_data = vs::ty::Data {
                 world: Matrix4::from(rotation).into(),
-                view: (view * scale).into(),
+                view: view.into(),
                 proj: proj.into(),
             };
 
@@ -409,6 +424,59 @@ fn window_dimensions(window: &Window) -> Fallible<[u32; 2]> {
         })
         .ok_or_else(|| format_err!("Window no longer exists"))
         .map_err(Into::into)
+}
+
+/// Camera.
+#[derive(Debug)]
+struct Camera {
+    /// Eye position.
+    pub position: Point3<f64>,
+    /// Distance from the center.
+    pub distance: f64,
+    /// Posture of the camera.
+    pub posture: Quaternion<f64>,
+    /// Scale.
+    pub scale: f64,
+}
+
+impl Camera {
+    /// Returns front direction vector.
+    fn front() -> Vector3<f64> {
+        Vector3::unit_z()
+    }
+
+    /// Creates a new `Camera`.
+    pub fn with_center_distance_posture(
+        center: Point3<f64>,
+        distance: f64,
+        posture: Quaternion<f64>,
+    ) -> Self {
+        let position = center - posture.conjugate() * Self::front() * distance;
+        debug!("Camera position = {:?}", position);
+        Self {
+            position,
+            distance,
+            posture,
+            scale: 1.0,
+        }
+    }
+
+    /// Returns center.
+    pub fn center(&self) -> Point3<f64> {
+        self.position + self.posture * Self::front() * self.distance
+    }
+
+    /// Returns view matrix.
+    pub fn view(&self) -> Matrix4<f64> {
+        use cgmath::EuclideanSpace;
+
+        cgmath::Decomposed {
+            scale: self.scale,
+            rot: self.posture,
+            disp: self.position - Point3::origin(),
+        }
+        .into()
+    }
 }
 
 pub mod vs {
