@@ -27,8 +27,8 @@ impl<S: Float> BoundingBox3d<S> {
     /// Extedns the bounding box to contain the given point.
     pub fn insert(&self, p: Point3<S>) -> Self {
         Self {
-            min: element_wise_apply(self.min, p, |x, y| x.min(y)),
-            max: element_wise_apply(self.max, p, |x, y| x.max(y)),
+            min: element_wise_apply(self.min, p, Float::min),
+            max: element_wise_apply(self.max, p, Float::max),
         }
     }
 
@@ -40,8 +40,8 @@ impl<S: Float> BoundingBox3d<S> {
     /// Merges the bounding boxes.
     pub fn union(&self, o: &BoundingBox3d<S>) -> Self {
         Self {
-            min: element_wise_apply(self.min, o.min, |x, y| x.min(y)),
-            max: element_wise_apply(self.max, o.max, |x, y| x.max(y)),
+            min: element_wise_apply(self.min, o.min, Float::min),
+            max: element_wise_apply(self.max, o.max, Float::max),
         }
     }
 

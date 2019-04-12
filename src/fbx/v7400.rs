@@ -377,8 +377,8 @@ impl<'a> Loader<'a> {
         trace!("Relative filename: {:?}", relative_filename);
         let file_ext = Path::new(&relative_filename)
             .extension()
-            .and_then(|s| s.to_str())
-            .map(|s| s.to_ascii_lowercase());
+            .and_then(std::ffi::OsStr::to_str)
+            .map(str::to_ascii_lowercase);
         trace!("File extension: {:?}", file_ext);
         let content = video_clip_obj
             .content()
