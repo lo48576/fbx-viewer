@@ -2,7 +2,7 @@
 
 use std::iter::FromIterator;
 
-use cgmath::{num_traits::Float, Point3};
+use cgmath::{num_traits::Float, BaseFloat, Point3, Vector3};
 
 /// 3D bounding box.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -13,7 +13,7 @@ pub struct BoundingBox3d<S> {
     max: Point3<S>,
 }
 
-impl<S: Float> BoundingBox3d<S> {
+impl<S: BaseFloat> BoundingBox3d<S> {
     /// Returns minimum xyz.
     pub fn min(&self) -> Point3<S> {
         self.min
@@ -22,6 +22,13 @@ impl<S: Float> BoundingBox3d<S> {
     /// Returns maximum xyz.
     pub fn max(&self) -> Point3<S> {
         self.max
+    }
+
+    /// Returns the size of the bounding box.
+    pub fn size(&self) -> Vector3<S> {
+        use cgmath::EuclideanSpace;
+
+        self.max.to_vec() - self.min.to_vec()
     }
 
     /// Extedns the bounding box to contain the given point.
@@ -51,13 +58,13 @@ impl<S: Float> BoundingBox3d<S> {
     }
 }
 
-impl<S: Float> From<Point3<S>> for BoundingBox3d<S> {
+impl<S: BaseFloat> From<Point3<S>> for BoundingBox3d<S> {
     fn from(p: Point3<S>) -> Self {
         Self { min: p, max: p }
     }
 }
 
-impl<S: Float> From<&Point3<S>> for BoundingBox3d<S> {
+impl<S: BaseFloat> From<&Point3<S>> for BoundingBox3d<S> {
     fn from(p: &Point3<S>) -> Self {
         Self { min: *p, max: *p }
     }
@@ -70,7 +77,7 @@ pub struct OptionalBoundingBox3d<S> {
     bbox: Option<BoundingBox3d<S>>,
 }
 
-impl<S: Float> OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> OptionalBoundingBox3d<S> {
     /// Creates a new `OptionalBoundingBox3d`.
     pub fn new() -> Self {
         Self::default()
@@ -114,37 +121,37 @@ impl<S> Default for OptionalBoundingBox3d<S> {
     }
 }
 
-impl<S: Float> From<BoundingBox3d<S>> for OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> From<BoundingBox3d<S>> for OptionalBoundingBox3d<S> {
     fn from(bbox: BoundingBox3d<S>) -> Self {
         Self { bbox: Some(bbox) }
     }
 }
 
-impl<S: Float> From<&BoundingBox3d<S>> for OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> From<&BoundingBox3d<S>> for OptionalBoundingBox3d<S> {
     fn from(bbox: &BoundingBox3d<S>) -> Self {
         Self { bbox: Some(*bbox) }
     }
 }
 
-impl<S: Float> From<Option<BoundingBox3d<S>>> for OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> From<Option<BoundingBox3d<S>>> for OptionalBoundingBox3d<S> {
     fn from(bbox: Option<BoundingBox3d<S>>) -> Self {
         Self { bbox }
     }
 }
 
-impl<S: Float> From<Point3<S>> for OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> From<Point3<S>> for OptionalBoundingBox3d<S> {
     fn from(p: Point3<S>) -> Self {
         BoundingBox3d::from(p).into()
     }
 }
 
-impl<S: Float> From<&Point3<S>> for OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> From<&Point3<S>> for OptionalBoundingBox3d<S> {
     fn from(p: &Point3<S>) -> Self {
         BoundingBox3d::from(*p).into()
     }
 }
 
-impl<S: Float> From<Option<Point3<S>>> for OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> From<Option<Point3<S>>> for OptionalBoundingBox3d<S> {
     fn from(p: Option<Point3<S>>) -> Self {
         Self {
             bbox: p.map(BoundingBox3d::from),
@@ -152,7 +159,7 @@ impl<S: Float> From<Option<Point3<S>>> for OptionalBoundingBox3d<S> {
     }
 }
 
-impl<S: Float> From<Option<&Point3<S>>> for OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> From<Option<&Point3<S>>> for OptionalBoundingBox3d<S> {
     fn from(p: Option<&Point3<S>>) -> Self {
         Self {
             bbox: p.map(BoundingBox3d::from),
@@ -160,7 +167,7 @@ impl<S: Float> From<Option<&Point3<S>>> for OptionalBoundingBox3d<S> {
     }
 }
 
-impl<S: Float> FromIterator<Point3<S>> for OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> FromIterator<Point3<S>> for OptionalBoundingBox3d<S> {
     fn from_iter<T>(iter: T) -> Self
     where
         T: IntoIterator<Item = Point3<S>>,
@@ -176,7 +183,7 @@ impl<S: Float> FromIterator<Point3<S>> for OptionalBoundingBox3d<S> {
     }
 }
 
-impl<'a, S: 'a + Float> FromIterator<&'a Point3<S>> for OptionalBoundingBox3d<S> {
+impl<'a, S: 'a + BaseFloat> FromIterator<&'a Point3<S>> for OptionalBoundingBox3d<S> {
     fn from_iter<T>(iter: T) -> Self
     where
         T: IntoIterator<Item = &'a Point3<S>>,
@@ -185,7 +192,7 @@ impl<'a, S: 'a + Float> FromIterator<&'a Point3<S>> for OptionalBoundingBox3d<S>
     }
 }
 
-impl<S: Float> FromIterator<BoundingBox3d<S>> for OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> FromIterator<BoundingBox3d<S>> for OptionalBoundingBox3d<S> {
     fn from_iter<T>(iter: T) -> Self
     where
         T: IntoIterator<Item = BoundingBox3d<S>>,
@@ -201,7 +208,7 @@ impl<S: Float> FromIterator<BoundingBox3d<S>> for OptionalBoundingBox3d<S> {
     }
 }
 
-impl<'a, S: 'a + Float> FromIterator<&'a BoundingBox3d<S>> for OptionalBoundingBox3d<S> {
+impl<'a, S: 'a + BaseFloat> FromIterator<&'a BoundingBox3d<S>> for OptionalBoundingBox3d<S> {
     fn from_iter<T>(iter: T) -> Self
     where
         T: IntoIterator<Item = &'a BoundingBox3d<S>>,
@@ -210,7 +217,7 @@ impl<'a, S: 'a + Float> FromIterator<&'a BoundingBox3d<S>> for OptionalBoundingB
     }
 }
 
-impl<S: Float> FromIterator<OptionalBoundingBox3d<S>> for OptionalBoundingBox3d<S> {
+impl<S: BaseFloat> FromIterator<OptionalBoundingBox3d<S>> for OptionalBoundingBox3d<S> {
     fn from_iter<T>(iter: T) -> Self
     where
         T: IntoIterator<Item = OptionalBoundingBox3d<S>>,
@@ -224,7 +231,9 @@ impl<S: Float> FromIterator<OptionalBoundingBox3d<S>> for OptionalBoundingBox3d<
     }
 }
 
-impl<'a, S: 'a + Float> FromIterator<&'a OptionalBoundingBox3d<S>> for OptionalBoundingBox3d<S> {
+impl<'a, S: 'a + BaseFloat> FromIterator<&'a OptionalBoundingBox3d<S>>
+    for OptionalBoundingBox3d<S>
+{
     fn from_iter<T>(iter: T) -> Self
     where
         T: IntoIterator<Item = &'a OptionalBoundingBox3d<S>>,

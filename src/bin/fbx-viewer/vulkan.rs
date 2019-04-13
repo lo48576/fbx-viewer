@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use cgmath::{Matrix3, Matrix4, Point3, Quaternion, Rad, Vector3};
+use cgmath::{
+    Angle, EuclideanSpace, Matrix4, Point3, Quaternion, Rad, Rotation, Rotation3, Vector3,
+};
 use failure::{bail, format_err, Fallible, ResultExt};
 use fbx_viewer::{fbx, CliOpt};
 use log::{debug, error, info, trace};
@@ -113,20 +115,16 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
         pipeline.clone(),
     )?;
 
-    let camera = {
-        use cgmath::{EuclideanSpace, Rotation};
-
-        let center = Point3::centroid(&[scene_bbox.min(), scene_bbox.max()]).map(Into::into);
-        debug!("Center calculated from bounding box: {:?}", center);
-        let size: Vector3<f64> = (scene_bbox.max() - scene_bbox.min()).map(Into::into);
-        let distance = size.x.max(size.y);
-        let posture = Quaternion::look_at(Vector3::unit_z(), -Vector3::unit_y());
-        Camera::with_center_distance_posture(center, distance, posture)
+    let initial_camera = {
+        let center = Point3::midpoint(scene_bbox.min(), scene_bbox.max()).map(Into::into);
+        debug!("Center calculated from the bounding box: {:?}", center);
+        let size: Vector3<f64> = scene_bbox.size().map(Into::into);
+        let distance = size[0].max(size[1]);
+        let position = Point3::new(center.x, center.y, center.z + distance);
+        Camera::with_position(position)
     };
-    debug!("Initial camera = {:?}", camera);
-    debug!("Center calculated from camera = {:?}", camera.center());
-
-    let rotation_start = std::time::Instant::now();
+    debug!("Initial camera = {:?}", initial_camera);
+    let mut camera = initial_camera;
 
     previous_frame
         .flush()
@@ -170,21 +168,24 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
         }
 
         let uniform_buffer_subbuffer = {
-            let elapsed = rotation_start.elapsed();
-            let rotation =
-                elapsed.as_secs() as f64 + f64::from(elapsed.subsec_nanos()) / 1_000_000_000.0;
-            let rotation = Matrix3::from_angle_y(Rad(rotation as f32));
-
             let aspect_ratio = dimensions[0] as f32 / dimensions[1] as f32;
 
-            let proj =
-                cgmath::perspective(Rad(std::f32::consts::FRAC_PI_3), aspect_ratio, 0.1, 1000.0);
+            /// Conversion from GL coordinate system to Vulkan coordinate
+            /// system.
+            ///
+            /// See <https://matthewwellings.com/blog/the-new-vulkan-coordinate-system/>.
+            const PROJ_GL_TO_VULKAN: Matrix4<f32> = Matrix4::new(
+                1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0, 0.0, 1.0,
+            );
+            let proj = PROJ_GL_TO_VULKAN
+                * cgmath::perspective(Rad::turn_div_6(), aspect_ratio, 0.1, 1000.0);
             let view: Matrix4<f32> = camera
                 .view()
                 .cast()
                 .ok_or_else(|| format_err!("Abnormal camera posture: {:?}", camera))?;
+            let world = <Matrix4<f32> as cgmath::SquareMatrix>::identity();
             let uniform_data = vs::ty::Data {
-                world: Matrix4::from(rotation).into(),
+                world: world.into(),
                 view: view.into(),
                 proj: proj.into(),
             };
@@ -333,7 +334,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
 
         let mut done = false;
         events_loop.poll_events(|ev| {
-            use winit::{Event, WindowEvent};
+            use winit::{ElementState, Event, KeyboardInput, ScanCode, WindowEvent};
             match ev {
                 Event::WindowEvent {
                     event: WindowEvent::CloseRequested,
@@ -343,6 +344,93 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                     event: WindowEvent::Resized(_),
                     ..
                 } => recreate_swapchain = true,
+                Event::WindowEvent {
+                    event: WindowEvent::KeyboardInput { input, .. },
+                    ..
+                } => {
+                    const FORWARD: ScanCode = 17;
+                    const BACK: ScanCode = 31;
+                    const LEFT: ScanCode = 30;
+                    const RIGHT: ScanCode = 32;
+                    const ZERO: ScanCode = 11;
+                    let move_delta = {
+                        let bbox_size = scene_bbox.size();
+                        let min_div_32 = bbox_size[0].min(bbox_size[1]).min(bbox_size[2]) / 32.0;
+                        let max_div_128 = bbox_size[0].max(bbox_size[1]).max(bbox_size[2]) / 128.0;
+                        f64::from(min_div_32.max(max_div_128))
+                    };
+                    const ANGLE_DELTA: Rad<f64> = Rad(std::f64::consts::FRAC_PI_2 / 16.0);
+                    match input {
+                        KeyboardInput {
+                            scancode: FORWARD,
+                            state: ElementState::Pressed,
+                            modifiers,
+                            ..
+                        } => {
+                            if modifiers.shift {
+                                camera.move_rel(Camera::up() * move_delta);
+                            } else if modifiers.ctrl {
+                                camera.rotate_up(ANGLE_DELTA);
+                            } else {
+                                camera.move_rel(Camera::front() * move_delta);
+                            }
+                        }
+                        KeyboardInput {
+                            scancode: BACK,
+                            state: ElementState::Pressed,
+                            modifiers,
+                            ..
+                        } => {
+                            if modifiers.shift {
+                                camera.move_rel(Camera::up() * -move_delta);
+                            } else if modifiers.ctrl {
+                                camera.rotate_up(-ANGLE_DELTA);
+                            } else {
+                                camera.move_rel(Camera::front() * -move_delta);
+                            }
+                        }
+                        KeyboardInput {
+                            scancode: LEFT,
+                            state: ElementState::Pressed,
+                            modifiers,
+                            ..
+                        } => {
+                            if modifiers.ctrl {
+                                camera.rotate_right(-ANGLE_DELTA);
+                            } else {
+                                camera.move_rel(Camera::right() * -move_delta);
+                            }
+                        }
+                        KeyboardInput {
+                            scancode: RIGHT,
+                            state: ElementState::Pressed,
+                            modifiers,
+                            ..
+                        } => {
+                            if modifiers.ctrl {
+                                camera.rotate_right(ANGLE_DELTA);
+                            } else {
+                                camera.move_rel(Camera::right() * move_delta);
+                            }
+                        }
+                        KeyboardInput {
+                            scancode: ZERO,
+                            state: ElementState::Pressed,
+                            modifiers,
+                            ..
+                        } => {
+                            if modifiers.ctrl {
+                                camera.yaw = initial_camera.yaw;
+                                camera.pitch = initial_camera.pitch;
+                                trace!("Reset camera posture: camera = {:?}", camera);
+                            } else {
+                                camera.position = initial_camera.position;
+                                trace!("Reset camera position: camera = {:?}", camera);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         });
@@ -427,55 +515,77 @@ fn window_dimensions(window: &Window) -> Fallible<[u32; 2]> {
 }
 
 /// Camera.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 struct Camera {
     /// Eye position.
     pub position: Point3<f64>,
-    /// Distance from the center.
-    pub distance: f64,
-    /// Posture of the camera.
-    pub posture: Quaternion<f64>,
+    /// Yaw.
+    ///
+    /// Positive is clockwise.
+    pub yaw: Rad<f64>,
+    /// Pitch.
+    ///
+    /// Positive is up.
+    pub pitch: Rad<f64>,
     /// Scale.
     pub scale: f64,
 }
 
 impl Camera {
-    /// Returns front direction vector.
+    /// Returns the front direction vector.
     fn front() -> Vector3<f64> {
-        Vector3::unit_z()
+        -Vector3::unit_z()
     }
 
-    /// Creates a new `Camera`.
-    pub fn with_center_distance_posture(
-        center: Point3<f64>,
-        distance: f64,
-        posture: Quaternion<f64>,
-    ) -> Self {
-        let position = center - posture.conjugate() * Self::front() * distance;
-        debug!("Camera position = {:?}", position);
+    /// Returns the up direction vector.
+    fn up() -> Vector3<f64> {
+        Vector3::unit_y()
+    }
+
+    /// Returns the right direction vector.
+    fn right() -> Vector3<f64> {
+        Vector3::unit_x()
+    }
+
+    /// Creates a new `Camera` with the given initial position.
+    pub fn with_position(position: Point3<f64>) -> Self {
         Self {
             position,
-            distance,
-            posture,
+            yaw: Rad(0.0),
+            pitch: Rad(0.0),
             scale: 1.0,
         }
     }
 
-    /// Returns center.
-    pub fn center(&self) -> Point3<f64> {
-        self.position + self.posture * Self::front() * self.distance
-    }
-
     /// Returns view matrix.
     pub fn view(&self) -> Matrix4<f64> {
-        use cgmath::EuclideanSpace;
+        Matrix4::from_scale(self.scale)
+            * Matrix4::from(Quaternion::from_angle_x(-self.pitch))
+            * Matrix4::from(Quaternion::from_angle_y(-self.yaw))
+            * Matrix4::from_translation(-self.position.to_vec())
+    }
 
-        cgmath::Decomposed {
-            scale: self.scale,
-            rot: self.posture,
-            disp: self.position - Point3::origin(),
-        }
-        .into()
+    /// Returns the direction the camera is looking at.
+    fn camera_direction(&self) -> Quaternion<f64> {
+        Quaternion::from_angle_x(self.pitch) * Quaternion::from_angle_y(self.yaw)
+    }
+
+    /// Moves the camera.
+    pub fn move_rel(&mut self, vec: Vector3<f64>) {
+        self.position += self.camera_direction().rotate_vector(vec);
+        trace!("Camera = {:?}", self);
+    }
+
+    /// Rotates the camera to up.
+    pub fn rotate_up(&mut self, angle: Rad<f64>) {
+        self.pitch = (self.pitch + angle).normalize_signed();
+        trace!("Camera = {:?}", self);
+    }
+
+    /// Rotates the camera to right.
+    pub fn rotate_right(&mut self, angle: Rad<f64>) {
+        self.yaw = (self.yaw - angle).normalize_signed();
+        trace!("Camera = {:?}", self);
     }
 }
 
