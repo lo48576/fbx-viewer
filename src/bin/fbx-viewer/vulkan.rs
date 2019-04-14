@@ -372,7 +372,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                             } else if modifiers.ctrl {
                                 camera.rotate_up(ANGLE_DELTA);
                             } else {
-                                camera.move_rel(Camera::front() * move_delta);
+                                camera.move_rel(Camera::forward() * move_delta);
                             }
                         }
                         KeyboardInput {
@@ -386,7 +386,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                             } else if modifiers.ctrl {
                                 camera.rotate_up(-ANGLE_DELTA);
                             } else {
-                                camera.move_rel(Camera::front() * -move_delta);
+                                camera.move_rel(Camera::forward() * -move_delta);
                             }
                         }
                         KeyboardInput {
@@ -532,8 +532,8 @@ struct Camera {
 }
 
 impl Camera {
-    /// Returns the front direction vector.
-    fn front() -> Vector3<f64> {
+    /// Returns the forward direction vector.
+    fn forward() -> Vector3<f64> {
         -Vector3::unit_z()
     }
 
