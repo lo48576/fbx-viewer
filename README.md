@@ -3,6 +3,10 @@
 [![Build Status](https://travis-ci.org/lo48576/fbx-viewer.svg?branch=develop)](https://travis-ci.org/lo48576/fbx-viewer)
 
 
+## Screenshots
+
+![](doc/capture01.png)
+
 ## Usage
 
 ### Prerequisite
