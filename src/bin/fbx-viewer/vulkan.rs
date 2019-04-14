@@ -372,7 +372,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                             } else if modifiers.ctrl {
                                 camera.rotate_up(ANGLE_DELTA);
                             } else {
-                                camera.move_rel(Camera::front() * move_delta);
+                                camera.move_rel(Camera::forward() * move_delta);
                             }
                         }
                         KeyboardInput {
@@ -386,7 +386,7 @@ pub fn main(opt: CliOpt) -> Fallible<()> {
                             } else if modifiers.ctrl {
                                 camera.rotate_up(-ANGLE_DELTA);
                             } else {
-                                camera.move_rel(Camera::front() * -move_delta);
+                                camera.move_rel(Camera::forward() * -move_delta);
                             }
                         }
                         KeyboardInput {
@@ -532,8 +532,8 @@ struct Camera {
 }
 
 impl Camera {
-    /// Returns the front direction vector.
-    fn front() -> Vector3<f64> {
+    /// Returns the forward direction vector.
+    fn forward() -> Vector3<f64> {
         -Vector3::unit_z()
     }
 
@@ -560,14 +560,14 @@ impl Camera {
     /// Returns view matrix.
     pub fn view(&self) -> Matrix4<f64> {
         Matrix4::from_scale(self.scale)
-            * Matrix4::from(Quaternion::from_angle_x(-self.pitch))
-            * Matrix4::from(Quaternion::from_angle_y(-self.yaw))
+            * Matrix4::from(self.camera_direction().conjugate())
             * Matrix4::from_translation(-self.position.to_vec())
     }
 
     /// Returns the direction the camera is looking at.
     fn camera_direction(&self) -> Quaternion<f64> {
-        Quaternion::from_angle_x(self.pitch) * Quaternion::from_angle_y(self.yaw)
+        // Note that this is extrinsic rotation.
+        Quaternion::from_angle_y(self.yaw) * Quaternion::from_angle_x(self.pitch)
     }
 
     /// Moves the camera.
