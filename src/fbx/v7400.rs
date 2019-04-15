@@ -79,22 +79,20 @@ impl<'a> Loader<'a> {
 
         debug!("Loading geometry mesh: {:?}", mesh_obj);
 
-        let control_points = mesh_obj
-            .control_points()
-            .with_context(|e| format_err!("Failed to get control points: {}", e))?;
         let polygon_vertices = mesh_obj
-            .polygon_vertex_indices()
+            .polygon_vertices()
             .with_context(|e| format_err!("Failed to get polygon vertices: {}", e))?;
         let triangle_pvi_indices = polygon_vertices
-            .triangulate_each(&control_points, triangulator)
+            .triangulate_each(triangulator)
             .with_context(|e| format_err!("Triangulation failed: {}", e))?;
 
         let positions = triangle_pvi_indices
             .iter_control_point_indices()
             .map(|cpi| {
                 let cpi = cpi.ok_or_else(|| format_err!("Failed to get control point index"))?;
-                control_points
-                    .get_cp_f32(cpi)
+                polygon_vertices
+                    .control_point(cpi)
+                    .map(|p| [p.x as f32, p.y as f32, p.z as f32])
                     .ok_or_else(|| format_err!("Failed to get control point"))
             })
             .collect::<Result<Vec<_>, _>>()
@@ -118,7 +116,11 @@ impl<'a> Loader<'a> {
                 .normals()?;
             triangle_pvi_indices
                 .triangle_vertex_indices()
-                .map(|tri_vi| normals.get_xyz_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
+                .map(|tri_vi| {
+                    normals
+                        .normal(&triangle_pvi_indices, tri_vi)
+                        .map(|p| [p.x as f32, p.y as f32, p.z as f32])
+                })
                 .collect::<Result<Vec<_>, _>>()
                 .with_context(|e| format_err!("Failed to reconstruct normals vertices: {}", e))?
         };
@@ -134,7 +136,10 @@ impl<'a> Loader<'a> {
                 .uv()?;
             triangle_pvi_indices
                 .triangle_vertex_indices()
-                .map(|tri_vi| uv.get_uv_f32_by_tri_vi(&triangle_pvi_indices, tri_vi))
+                .map(|tri_vi| {
+                    uv.uv(&triangle_pvi_indices, tri_vi)
+                        .map(|p| [p.x as f32, p.y as f32])
+                })
                 .collect::<Result<Vec<_>, _>>()
                 .with_context(|e| format_err!("Failed to reconstruct UV vertices: {}", e))?
         };
@@ -153,7 +158,7 @@ impl<'a> Loader<'a> {
                 .with_context(|e| format_err!("Failed to get materials: {}", e))?;
             for tri_vi in triangle_pvi_indices.triangle_vertex_indices() {
                 let local_material_index = materials
-                    .get_material_index_by_tri_vi(&triangle_pvi_indices, tri_vi)
+                    .material_index(&triangle_pvi_indices, tri_vi)
                     .with_context(|e| {
                         format_err!("Failed to get mesh-local material index: {}", e)
                     })?
@@ -234,9 +239,9 @@ impl<'a> Loader<'a> {
                     .ambient_factor_or_default()
                     .with_context(|e| format_err!("Failed to get ambient factor: {}", e))?;
                 let ambient_color = [
-                    (ambient_color[0] * ambient_factor) as f32,
-                    (ambient_color[1] * ambient_factor) as f32,
-                    (ambient_color[2] * ambient_factor) as f32,
+                    (ambient_color.r * ambient_factor) as f32,
+                    (ambient_color.g * ambient_factor) as f32,
+                    (ambient_color.b * ambient_factor) as f32,
                 ];
                 let diffuse_color = properties
                     .diffuse_color_or_default()
@@ -245,9 +250,9 @@ impl<'a> Loader<'a> {
                     .diffuse_factor_or_default()
                     .with_context(|e| format_err!("Failed to get diffuse factor: {}", e))?;
                 let diffuse_color = [
-                    (diffuse_color[0] * diffuse_factor) as f32,
-                    (diffuse_color[1] * diffuse_factor) as f32,
-                    (diffuse_color[2] * diffuse_factor) as f32,
+                    (diffuse_color.r * diffuse_factor) as f32,
+                    (diffuse_color.g * diffuse_factor) as f32,
+                    (diffuse_color.b * diffuse_factor) as f32,
                 ];
                 let emissive_color = properties
                     .emissive_color_or_default()
@@ -256,9 +261,9 @@ impl<'a> Loader<'a> {
                     .emissive_factor_or_default()
                     .with_context(|e| format_err!("Failed to get emissive factor: {}", e))?;
                 let emissive_color = [
-                    (emissive_color[0] * emissive_factor) as f32,
-                    (emissive_color[1] * emissive_factor) as f32,
-                    (emissive_color[2] * emissive_factor) as f32,
+                    (emissive_color.r * emissive_factor) as f32,
+                    (emissive_color.g * emissive_factor) as f32,
+                    (emissive_color.b * emissive_factor) as f32,
                 ];
                 ShadingData::Lambert(LambertData {
                     ambient: ambient_color,

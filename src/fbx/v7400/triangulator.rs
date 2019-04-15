@@ -2,20 +2,19 @@
 
 use std::f64;
 
-use cgmath::{InnerSpace, Vector2, Vector3};
+use cgmath::{InnerSpace, Point3, Vector2, Vector3};
 use failure::{bail, format_err, Fallible};
-use fbxcel_dom::v7400::data::mesh::{ControlPoints, PolygonVertexIndex, PolygonVertices};
+use fbxcel_dom::v7400::data::mesh::{PolygonVertexIndex, PolygonVertices};
 
 /// Triangulator.
 pub fn triangulator(
-    cps: &ControlPoints<'_>,
     pvs: &PolygonVertices<'_>,
     poly_pvis: &[PolygonVertexIndex],
     results: &mut Vec<[PolygonVertexIndex; 3]>,
 ) -> Fallible<()> {
     macro_rules! get_vec {
         ($pvii:expr) => {
-            get_vec(cps, pvs, poly_pvis[$pvii])
+            get_vec(pvs, poly_pvis[$pvii])
         };
     }
 
@@ -138,34 +137,30 @@ pub fn triangulator(
 }
 
 /// Returns the vector.
-fn get_vec(
-    cps: &ControlPoints<'_>,
-    pvs: &PolygonVertices<'_>,
-    pvi: PolygonVertexIndex,
-) -> Fallible<Vector3<f64>> {
-    pvi.get_vertex(cps, pvs)
+fn get_vec(pvs: &PolygonVertices<'_>, pvi: PolygonVertexIndex) -> Fallible<Point3<f64>> {
+    pvs.control_point(pvi)
         .map(Into::into)
         .ok_or_else(|| format_err!("Index out of range: {:?}", pvi))
 }
 
 /// Returns bounding box as `(min, max)`.
 fn bounding_box<'a>(
-    vecs: impl IntoIterator<Item = &'a Vector3<f64>>,
-) -> Option<(Vector3<f64>, Vector3<f64>)> {
-    vecs.into_iter().fold(None, |minmax, vec| {
+    points: impl IntoIterator<Item = &'a Point3<f64>>,
+) -> Option<(Point3<f64>, Point3<f64>)> {
+    points.into_iter().fold(None, |minmax, point| {
         minmax.map_or_else(
-            || Some((*vec, *vec)),
+            || Some((*point, *point)),
             |(min, max)| {
                 Some((
-                    Vector3 {
-                        x: min.x.min(vec.x),
-                        y: min.y.min(vec.y),
-                        z: min.z.min(vec.z),
+                    Point3 {
+                        x: min.x.min(point.x),
+                        y: min.y.min(point.y),
+                        z: min.z.min(point.z),
                     },
-                    Vector3 {
-                        x: max.x.max(vec.x),
-                        y: max.y.max(vec.y),
-                        z: max.z.max(vec.z),
+                    Point3 {
+                        x: max.x.max(point.x),
+                        y: max.y.max(point.y),
+                        z: max.z.max(point.z),
                     },
                 ))
             },
