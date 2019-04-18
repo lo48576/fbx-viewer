@@ -49,9 +49,11 @@ impl Loader {
             let vertices = src_geometry
                 .positions
                 .iter()
-                .zip(src_geometry.normals.iter())
-                .zip(src_geometry.uv.iter())
-                .map(|((&position, &normal), &uv)| drawable::Vertex {
+                .cloned()
+                .map(Into::into)
+                .zip(src_geometry.normals.iter().cloned().map(Into::into))
+                .zip(src_geometry.uv.iter().cloned().map(Into::into))
+                .map(|((position, normal), uv)| drawable::Vertex {
                     position,
                     normal,
                     uv,

@@ -2,6 +2,7 @@
 
 use std::{collections::HashMap, path::Path};
 
+use cgmath::{Point2, Point3, Vector3};
 use failure::{bail, format_err, Fallible, ResultExt};
 use fbxcel_dom::v7400::{
     data::{
@@ -13,9 +14,12 @@ use fbxcel_dom::v7400::{
 };
 use log::{debug, trace};
 
-use crate::data::{
-    GeometryMesh, GeometryMeshIndex, LambertData, Material, MaterialIndex, Mesh, MeshIndex, Scene,
-    ShadingData, Texture, TextureIndex, WrapMode,
+use crate::{
+    data::{
+        GeometryMesh, GeometryMeshIndex, LambertData, Material, MaterialIndex, Mesh, MeshIndex,
+        Scene, ShadingData, Texture, TextureIndex, WrapMode,
+    },
+    util::iter::{OptionIteratorExt, ResultIteratorExt},
 };
 
 use self::triangulator::triangulator;
@@ -88,12 +92,17 @@ impl<'a> Loader<'a> {
 
         let positions = triangle_pvi_indices
             .iter_control_point_indices()
-            .map(|cpi| {
-                let cpi = cpi.ok_or_else(|| format_err!("Failed to get control point index"))?;
+            .ok_or_else(|| format_err!("Failed to get control point index"))
+            .and_then(|cpi| {
                 polygon_vertices
                     .control_point(cpi)
-                    .map(|p| [p.x as f32, p.y as f32, p.z as f32])
-                    .ok_or_else(|| format_err!("Failed to get control point"))
+                    .map(Point3::from)
+                    .ok_or_else(|| format_err!("Failed to get control point: cpi={:?}", cpi))
+            })
+            .and_then(|p| {
+                p.cast().ok_or_else(|| {
+                    format_err!("Failed to convert floating point values: point={:?}", p)
+                })
             })
             .collect::<Result<Vec<_>, _>>()
             .with_context(|e| format_err!("Failed to reconstruct position vertices: {}", e))?;
@@ -113,13 +122,19 @@ impl<'a> Loader<'a> {
                 })
                 .next()
                 .ok_or_else(|| format_err!("Failed to get normals"))?
-                .normals()?;
+                .normals()
+                .with_context(|e| format_err!("Failed to get normals: {}", e))?;
             triangle_pvi_indices
                 .triangle_vertex_indices()
                 .map(|tri_vi| {
                     normals
                         .normal(&triangle_pvi_indices, tri_vi)
-                        .map(|p| [p.x as f32, p.y as f32, p.z as f32])
+                        .map(Vector3::from)
+                })
+                .and_then(|v| {
+                    v.cast().ok_or_else(|| {
+                        format_err!("Failed to convert floating point values: vector={:?}", v)
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .with_context(|e| format_err!("Failed to reconstruct normals vertices: {}", e))?
@@ -136,9 +151,11 @@ impl<'a> Loader<'a> {
                 .uv()?;
             triangle_pvi_indices
                 .triangle_vertex_indices()
-                .map(|tri_vi| {
-                    uv.uv(&triangle_pvi_indices, tri_vi)
-                        .map(|p| [p.x as f32, p.y as f32])
+                .map(|tri_vi| uv.uv(&triangle_pvi_indices, tri_vi).map(Point2::from))
+                .and_then(|p| {
+                    p.cast().ok_or_else(|| {
+                        format_err!("Failed to convert floating point values: point={:?}", p)
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .with_context(|e| format_err!("Failed to reconstruct UV vertices: {}", e))?
