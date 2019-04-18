@@ -94,10 +94,10 @@ impl Loader {
             let diffuse_texture_exists = src_material.diffuse_texture.is_some();
             let data = match src_material.data {
                 data::ShadingData::Lambert(lambert) => fs::ty::Material {
-                    ambient: lambert.ambient,
+                    ambient: lambert.ambient.into(),
                     _dummy0: [0; 4],
-                    diffuse: lambert.diffuse,
-                    emissive: lambert.emissive,
+                    diffuse: lambert.diffuse.into(),
+                    emissive: lambert.emissive.into(),
                     _dummy1: [0; 4],
                     enabled: !diffuse_texture_exists as u32,
                 },

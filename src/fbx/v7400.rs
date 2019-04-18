@@ -13,6 +13,7 @@ use fbxcel_dom::v7400::{
     Document,
 };
 use log::{debug, trace};
+use rgb::ComponentMap;
 
 use crate::{
     data::{
@@ -255,37 +256,25 @@ impl<'a> Loader<'a> {
                 let ambient_factor = properties
                     .ambient_factor_or_default()
                     .with_context(|e| format_err!("Failed to get ambient factor: {}", e))?;
-                let ambient_color = [
-                    (ambient_color.r * ambient_factor) as f32,
-                    (ambient_color.g * ambient_factor) as f32,
-                    (ambient_color.b * ambient_factor) as f32,
-                ];
+                let ambient = (ambient_color * ambient_factor).map(|v| v as f32);
                 let diffuse_color = properties
                     .diffuse_color_or_default()
                     .with_context(|e| format_err!("Failed to get diffuse color: {}", e))?;
                 let diffuse_factor = properties
                     .diffuse_factor_or_default()
                     .with_context(|e| format_err!("Failed to get diffuse factor: {}", e))?;
-                let diffuse_color = [
-                    (diffuse_color.r * diffuse_factor) as f32,
-                    (diffuse_color.g * diffuse_factor) as f32,
-                    (diffuse_color.b * diffuse_factor) as f32,
-                ];
+                let diffuse = (diffuse_color * diffuse_factor).map(|v| v as f32);
                 let emissive_color = properties
                     .emissive_color_or_default()
                     .with_context(|e| format_err!("Failed to get emissive color: {}", e))?;
                 let emissive_factor = properties
                     .emissive_factor_or_default()
                     .with_context(|e| format_err!("Failed to get emissive factor: {}", e))?;
-                let emissive_color = [
-                    (emissive_color.r * emissive_factor) as f32,
-                    (emissive_color.g * emissive_factor) as f32,
-                    (emissive_color.b * emissive_factor) as f32,
-                ];
+                let emissive = (emissive_color * emissive_factor).map(|v| v as f32);
                 ShadingData::Lambert(LambertData {
-                    ambient: ambient_color,
-                    diffuse: diffuse_color,
-                    emissive: emissive_color,
+                    ambient,
+                    diffuse,
+                    emissive,
                 })
             }
             v => bail!("Unknown shading model: {:?}", v),

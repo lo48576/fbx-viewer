@@ -1,5 +1,7 @@
 //! Material.
 
+use rgb::RGB;
+
 use crate::data::TextureIndex;
 
 /// Material.
@@ -24,9 +26,9 @@ pub enum ShadingData {
 #[derive(Debug, Clone, Copy)]
 pub struct LambertData {
     /// Ambient.
-    pub ambient: [f32; 3],
+    pub ambient: RGB<f32>,
     /// Diffuse.
-    pub diffuse: [f32; 3],
+    pub diffuse: RGB<f32>,
     /// Emissive.
-    pub emissive: [f32; 3],
+    pub emissive: RGB<f32>,
 }
