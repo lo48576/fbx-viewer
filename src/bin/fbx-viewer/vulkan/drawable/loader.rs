@@ -49,9 +49,11 @@ impl Loader {
             let vertices = src_geometry
                 .positions
                 .iter()
-                .zip(src_geometry.normals.iter())
-                .zip(src_geometry.uv.iter())
-                .map(|((&position, &normal), &uv)| drawable::Vertex {
+                .cloned()
+                .map(Into::into)
+                .zip(src_geometry.normals.iter().cloned().map(Into::into))
+                .zip(src_geometry.uv.iter().cloned().map(Into::into))
+                .map(|((position, normal), uv)| drawable::Vertex {
                     position,
                     normal,
                     uv,
@@ -92,10 +94,10 @@ impl Loader {
             let diffuse_texture_exists = src_material.diffuse_texture.is_some();
             let data = match src_material.data {
                 data::ShadingData::Lambert(lambert) => fs::ty::Material {
-                    ambient: lambert.ambient,
+                    ambient: lambert.ambient.into(),
                     _dummy0: [0; 4],
-                    diffuse: lambert.diffuse,
-                    emissive: lambert.emissive,
+                    diffuse: lambert.diffuse.into(),
+                    emissive: lambert.emissive.into(),
                     _dummy1: [0; 4],
                     enabled: !diffuse_texture_exists as u32,
                 },
