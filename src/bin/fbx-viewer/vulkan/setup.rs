@@ -61,13 +61,11 @@ pub fn setup() -> Fallible<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>, Event
     // List device queue families.
     for family in physical.queue_families() {
         debug!(
-            "Queue family found: id={:?}, count={:?}, \
-             graphics={:?}, compute={:?}, transfers={:?}",
+            "Queue family found: id={:?}, count={:?}, graphics={:?}, compute={:?}",
             family.id(),
             family.queues_count(),
             family.supports_graphics(),
             family.supports_compute(),
-            family.supports_transfers()
         );
     }
 

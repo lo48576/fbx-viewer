@@ -3,7 +3,7 @@
 #![allow(clippy::ref_in_deref)]
 
 /// Vertex.
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct Vertex {
     /// Position.
     pub position: [f32; 3],

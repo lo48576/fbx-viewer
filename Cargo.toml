@@ -18,14 +18,14 @@ cgmath = { version = "0.17", features = ["mint"] }
 env_logger = "0.6"
 failure = "0.1.5"
 fbxcel-dom = "0.0.3"
-image = "0.21"
+image = "0.22"
 log = "0.4"
 rgb = "0.8"
 structopt = "0.2"
-vulkano = "0.11"
-vulkano-shaders = "0.11"
-vulkano-win = "0.11"
-winit = "0.18"
+vulkano = "0.13"
+vulkano-shaders = "0.13"
+vulkano-win = "0.13"
+winit = "0.19"
 
 [badges]
 maintenance = { status = "experimental" }
