@@ -19,7 +19,7 @@ pub fn triangulator(
     }
 
     match poly_pvis.len() {
-        n @ 0...2 => {
+        n @ 0..=2 => {
             // Not a polygon.
             // It is impossible to triangulate a point, line, or "nothing".
             bail!("Not enough vertices in the polygon: length={}", n);
