@@ -22,9 +22,9 @@ image = "0.22"
 log = "0.4"
 rgb = "0.8"
 structopt = "0.2"
-vulkano = "0.13"
-vulkano-shaders = "0.13"
-vulkano-win = "0.13"
+vulkano = "0.14"
+vulkano-shaders = "0.14"
+vulkano-win = "0.14"
 winit = "0.19"
 
 [badges]
