@@ -197,7 +197,7 @@ pub fn create_diffuse_texture_desc_set(
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
 ) -> Fallible<Arc<dyn DescriptorSet + Send + Sync>> {
     let desc_set = PersistentDescriptorSet::start(pipeline, 1)
-        .add_sampled_image(image.clone(), sampler.clone())
+        .add_sampled_image(image, sampler)
         .with_context(|e| format_err!("Failed to add sampled image to descriptor set: {}", e))?
         .build()
         .with_context(|e| format_err!("Failed to build descriptor set: {}", e))?;

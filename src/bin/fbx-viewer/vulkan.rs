@@ -495,7 +495,7 @@ fn window_size_dependent_setup(
             Subpass::from(render_pass.clone(), 0)
                 .ok_or_else(|| format_err!("Failed to create subpass"))?,
         )
-        .build(device.clone())
+        .build(device)
         .map(Arc::new)
         .with_context(|e| format_err!("Failed to create pipeline: {}", e))?;
 

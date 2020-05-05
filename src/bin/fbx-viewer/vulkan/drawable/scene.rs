@@ -93,7 +93,7 @@ fn create_material_desc_set(
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
 ) -> Fallible<Arc<dyn DescriptorSet + Send + Sync>> {
     let desc_set = PersistentDescriptorSet::start(pipeline.clone(), 2)
-        .add_buffer(material_buf.clone())
+        .add_buffer(material_buf)
         .with_context(|e| format_err!("Failed to add material data to descriptor set: {}", e))?
         .build()
         .with_context(|e| format_err!("Failed to build material descriptor set: {}", e))?;
