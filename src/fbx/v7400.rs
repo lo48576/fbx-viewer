@@ -395,7 +395,7 @@ impl<'a> Loader<'a> {
             .content()
             .ok_or_else(|| format_err!("Currently, only embedded texture is supported"))?;
         let image = match file_ext.as_ref().map(AsRef::as_ref) {
-            Some("tga") => image::load_from_memory_with_format(content, image::ImageFormat::TGA)
+            Some("tga") => image::load_from_memory_with_format(content, image::ImageFormat::Tga)
                 .with_context(|e| format_err!("Failed to load TGA image: {}", e))?,
             _ => image::load_from_memory(content)
                 .with_context(|e| format_err!("Failed to load image: {}", e))?,
