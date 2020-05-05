@@ -15,13 +15,13 @@ all-features = true
 
 [dependencies]
 cgmath = { version = "0.17", features = ["mint"] }
-env_logger = "0.6"
+env_logger = "0.7"
 failure = "0.1.5"
 fbxcel-dom = "0.0.3"
-image = "0.22"
+image = "0.23"
 log = "0.4"
 rgb = "0.8"
-structopt = "0.2"
+structopt = "0.3"
 vulkano = "0.16"
 vulkano-shaders = "0.16"
 vulkano-win = "0.16"
