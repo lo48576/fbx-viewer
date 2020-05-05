@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use failure::{format_err, Fallible, ResultExt};
+use anyhow::Context;
 use fbx_viewer::{
     data::{GeometryMeshIndex, MaterialIndex, TextureIndex},
     util::bbox::OptionalBoundingBox3d,
@@ -63,7 +63,7 @@ impl Scene {
     pub fn reset_cache_with_pipeline(
         &mut self,
         pipeline: &Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-    ) -> Fallible<Option<Box<dyn GpuFuture>>> {
+    ) -> anyhow::Result<Option<Box<dyn GpuFuture>>> {
         let future = None;
 
         for material in &mut self.materials {
@@ -91,12 +91,12 @@ impl Scene {
 fn create_material_desc_set(
     material_buf: Arc<ImmutableBuffer<ShaderMaterial>>,
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-) -> Fallible<Arc<dyn DescriptorSet + Send + Sync>> {
+) -> anyhow::Result<Arc<dyn DescriptorSet + Send + Sync>> {
     let desc_set = PersistentDescriptorSet::start(pipeline.clone(), 2)
         .add_buffer(material_buf)
-        .with_context(|e| format_err!("Failed to add material data to descriptor set: {}", e))?
+        .context("Failed to add material data to descriptor set")?
         .build()
-        .with_context(|e| format_err!("Failed to build material descriptor set: {}", e))?;
+        .context("Failed to build material descriptor set")?;
 
     Ok(Arc::new(desc_set) as Arc<_>)
 }

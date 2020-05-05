@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use failure::{format_err, Fallible, ResultExt};
+use anyhow::Context;
 use fbx_viewer::data;
 use vulkano::{
     buffer::{BufferUsage, ImmutableBuffer},
@@ -42,7 +42,7 @@ impl Loader {
     pub(crate) fn load(
         mut self,
         src_scene: &data::Scene,
-    ) -> Fallible<(drawable::Scene, Option<Box<dyn GpuFuture>>)> {
+    ) -> anyhow::Result<(drawable::Scene, Option<Box<dyn GpuFuture>>)> {
         let mut scene = drawable::Scene::default();
 
         for src_geometry in src_scene.geometry_meshes() {
@@ -78,8 +78,8 @@ impl Loader {
                     join_futures(&mut self.future, buf_future);
                     Ok(buf)
                 })
-                .collect::<Fallible<Vec<_>>>()
-                .with_context(|e| format_err!("Failed to upload index buffers: {}", e))?;
+                .collect::<anyhow::Result<Vec<_>>>()
+                .context("Failed to upload index buffers")?;
             let bounding_box = src_geometry.bbox_mesh();
             let geometry = drawable::GeometryMesh {
                 name: src_geometry.name.clone(),
@@ -104,7 +104,7 @@ impl Loader {
             };
             let (data, data_future) =
                 ImmutableBuffer::from_data(data, BufferUsage::all(), self.queue.clone())
-                    .with_context(|e| format_err!("Failed to upload material: {}", e))?;
+                    .context("Failed to upload material")?;
             join_futures(&mut self.future, data_future);
 
             let material = drawable::Material {
@@ -133,7 +133,7 @@ impl Loader {
                 R8G8B8A8Srgb,
                 self.queue.clone(),
             )
-            .with_context(|e| format_err!("Failed to upload texture image: {}", e))?;
+            .context("Failed to upload texture image")?;
             join_futures(&mut self.future, image_future);
             let wrap_mode_u = match src_texture.wrap_mode_u {
                 data::WrapMode::Repeat => SamplerAddressMode::Repeat,
@@ -156,7 +156,7 @@ impl Loader {
                 0.0,
                 0.0,
             )
-            .with_context(|e| format_err!("Failed to create sampler: {}", e))?;
+            .context("Failed to create sampler")?;
 
             let texture = drawable::Texture {
                 name: src_texture.name.clone(),

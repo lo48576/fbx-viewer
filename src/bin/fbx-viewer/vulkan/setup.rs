@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use failure::{format_err, Fallible, ResultExt};
+use anyhow::{anyhow, Context};
 use log::{debug, info};
 use vulkano::{
     descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet},
@@ -20,12 +20,11 @@ use winit::{EventsLoop, Window, WindowBuilder};
 
 /// Initialize vulkan.
 #[allow(clippy::type_complexity)]
-pub fn setup() -> Fallible<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>, EventsLoop)> {
+pub fn setup() -> anyhow::Result<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>, EventsLoop)> {
     // Create an instance of vulkan.
     let instance = {
         let extensions = vulkano_win::required_extensions();
-        Instance::new(None, &extensions, None)
-            .with_context(|e| format_err!("Failed to create vulkan instance: {}", e))?
+        Instance::new(None, &extensions, None).context("Failed to create vulkan instance")?
     };
     debug!("Successfully created vulkan instance: {:?}", instance);
 
@@ -44,12 +43,12 @@ pub fn setup() -> Fallible<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>, Event
     let events_loop = EventsLoop::new();
     let surface = WindowBuilder::new()
         .build_vk_surface(&events_loop, instance.clone())
-        .with_context(|e| format_err!("Failed to create window surface: {}", e))?;
+        .context("Failed to create window surface")?;
 
     // Select a physical device.
     let physical = PhysicalDevice::enumerate(&instance)
         .next()
-        .ok_or_else(|| format_err!("No physical devices available"))?;
+        .ok_or_else(|| anyhow!("No physical devices available"))?;
     info!(
         "Selected physical device: index={:?}, name={:?}, type={:?}, api_version={:?}",
         physical.index(),
@@ -73,7 +72,7 @@ pub fn setup() -> Fallible<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>, Event
     let queue_family = physical
         .queue_families()
         .find(|&q| q.supports_graphics() && surface.is_supported(q).unwrap_or(false))
-        .ok_or_else(|| format_err!("No graphical queues available"))?;
+        .ok_or_else(|| anyhow!("No graphical queues available"))?;
     info!(
         "Using queue family: id={:?}, count={:?}",
         queue_family.id(),
@@ -97,7 +96,7 @@ pub fn setup() -> Fallible<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>, Event
             &device_ext,
             [(queue_family, QUEUE_PRIORITY)].iter().cloned(),
         )
-        .with_context(|e| format_err!("Failed to create device: {}", e))?;
+        .context("Failed to create device")?;
         (device, queues.next().expect("Should never fail"))
     };
     info!("Successfully created device object");
@@ -111,17 +110,17 @@ pub fn create_swapchain(
     device: &Arc<Device>,
     queue: &Arc<Queue>,
     surface: &Arc<Surface<Window>>,
-) -> Fallible<(Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>)> {
+) -> anyhow::Result<(Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>)> {
     let caps = surface
         .capabilities(device.physical_device())
-        .with_context(|e| format_err!("Failed to get surface capabilities: {}", e))?;
+        .context("Failed to get surface capabilities")?;
     debug!("Capabilities: {:?}", caps);
     let usage = caps.supported_usage_flags;
     let alpha = caps
         .supported_composite_alpha
         .iter()
         .next()
-        .ok_or_else(|| format_err!("No desired composite alpha modes are supported"))?;
+        .ok_or_else(|| anyhow!("No desired composite alpha modes are supported"))?;
     info!("Selected alpha composite mode: {:?}", alpha);
     let format = caps.supported_formats[0].0;
     info!("Selected swapchain format: {:?}", format);
@@ -134,7 +133,7 @@ pub fn create_swapchain(
             let dimensions: (u32, u32) = dimensions.to_physical(window.get_hidpi_factor()).into();
             [dimensions.0, dimensions.1]
         })
-        .ok_or_else(|| format_err!("The window no longer exists"))?;
+        .ok_or_else(|| anyhow!("The window no longer exists"))?;
     let (swapchain, image) = Swapchain::new(
         device.clone(),
         surface.clone(),
@@ -150,7 +149,7 @@ pub fn create_swapchain(
         true,
         None,
     )
-    .with_context(|e| format_err!("Failed to create swapchain: {}", e))?;
+    .context("Failed to create swapchain")?;
     Ok((swapchain, image))
 }
 
@@ -159,7 +158,7 @@ pub fn create_swapchain(
 pub fn create_dummy_texture(
     device: Arc<Device>,
     queue: Arc<Queue>,
-) -> Fallible<(
+) -> anyhow::Result<(
     Arc<ImmutableImage<R8G8B8A8Srgb>>,
     Arc<Sampler>,
     Box<dyn GpuFuture>,
@@ -171,7 +170,7 @@ pub fn create_dummy_texture(
     };
     let (image, img_future) =
         ImmutableImage::from_iter(raw_image.iter().cloned(), dim, R8G8B8A8Srgb, queue)
-            .with_context(|e| format_err!("Failed to upload dummy texture image: {}", e))?;
+            .context("Failed to upload dummy texture image")?;
     let sampler = Sampler::new(
         device,
         Filter::Linear,
@@ -185,7 +184,7 @@ pub fn create_dummy_texture(
         0.0,
         0.0,
     )
-    .with_context(|e| format_err!("Failed to create sampler: {}", e))?;
+    .context("Failed to create sampler")?;
 
     Ok((image, sampler, Box::new(img_future)))
 }
@@ -195,12 +194,12 @@ pub fn create_diffuse_texture_desc_set(
     image: Arc<ImmutableImage<R8G8B8A8Srgb>>,
     sampler: Arc<Sampler>,
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-) -> Fallible<Arc<dyn DescriptorSet + Send + Sync>> {
+) -> anyhow::Result<Arc<dyn DescriptorSet + Send + Sync>> {
     let desc_set = PersistentDescriptorSet::start(pipeline, 1)
         .add_sampled_image(image, sampler)
-        .with_context(|e| format_err!("Failed to add sampled image to descriptor set: {}", e))?
+        .context("Failed to add sampled image to descriptor set")?
         .build()
-        .with_context(|e| format_err!("Failed to build descriptor set: {}", e))?;
+        .context("Failed to build descriptor set")?;
 
     Ok(Arc::new(desc_set) as Arc<_>)
 }

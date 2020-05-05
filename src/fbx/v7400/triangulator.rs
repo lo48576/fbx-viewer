@@ -2,8 +2,8 @@
 
 use std::f64;
 
+use anyhow::{anyhow, bail};
 use cgmath::{InnerSpace, Point3, Vector2, Vector3};
-use failure::{bail, format_err, Fallible};
 use fbxcel_dom::v7400::data::mesh::{PolygonVertexIndex, PolygonVertices};
 
 /// Triangulator.
@@ -11,7 +11,7 @@ pub fn triangulator(
     pvs: &PolygonVertices<'_>,
     poly_pvis: &[PolygonVertexIndex],
     results: &mut Vec<[PolygonVertexIndex; 3]>,
-) -> Fallible<()> {
+) -> anyhow::Result<()> {
     macro_rules! get_vec {
         ($pvii:expr) => {
             get_vec(pvs, poly_pvis[$pvii])
@@ -137,10 +137,10 @@ pub fn triangulator(
 }
 
 /// Returns the vector.
-fn get_vec(pvs: &PolygonVertices<'_>, pvi: PolygonVertexIndex) -> Fallible<Point3<f64>> {
+fn get_vec(pvs: &PolygonVertices<'_>, pvi: PolygonVertexIndex) -> anyhow::Result<Point3<f64>> {
     pvs.control_point(pvi)
         .map(Into::into)
-        .ok_or_else(|| format_err!("Index out of range: {:?}", pvi))
+        .ok_or_else(|| anyhow!("Index out of range: {:?}", pvi))
 }
 
 /// Returns bounding box as `(min, max)`.
