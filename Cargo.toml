@@ -15,9 +15,9 @@ all-features = true
 
 [dependencies]
 anyhow = "1"
-cgmath = { version = "0.17", features = ["mint"] }
+cgmath = { version = "0.18.0", features = ["mint"] }
 env_logger = "0.7"
-fbxcel-dom = "0.0.5"
+fbxcel-dom = "0.0.6"
 image = "0.23.12"
 log = "0.4"
 rgb = "0.8"
