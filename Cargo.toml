@@ -27,6 +27,8 @@ vulkano-shaders = "0.16"
 vulkano-win = "0.16"
 winit = "0.19"
 
+vk-sys = "=0.5.2"
+
 [badges]
 maintenance = { status = "experimental" }
 travis-ci = { repository = "lo48576/fbx-viewer" }
