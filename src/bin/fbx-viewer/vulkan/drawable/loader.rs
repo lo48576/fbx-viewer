@@ -128,7 +128,7 @@ impl Loader {
                 height: src_texture.image.height(),
             };
             let (image, image_future) = ImmutableImage::from_iter(
-                src_texture.image.to_rgba().into_raw().into_iter(),
+                src_texture.image.to_rgba8().into_raw().into_iter(),
                 dim,
                 R8G8B8A8Srgb,
                 self.queue.clone(),

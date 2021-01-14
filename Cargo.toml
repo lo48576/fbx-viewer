@@ -18,7 +18,7 @@ anyhow = "1"
 cgmath = { version = "0.17", features = ["mint"] }
 env_logger = "0.7"
 fbxcel-dom = "0.0.5"
-image = "0.23"
+image = "0.23.12"
 log = "0.4"
 rgb = "0.8"
 structopt = "0.3"
