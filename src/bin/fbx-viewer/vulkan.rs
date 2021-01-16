@@ -77,12 +77,12 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
             .context("Failed to set up pipeline and framebuffers")?;
     let mut recreate_swapchain = false;
 
-    let mut previous_frame: Box<dyn GpuFuture> = Box::new(vulkano::sync::now(device.clone()));
+    let mut previous_frame: Box<dyn GpuFuture> = vulkano::sync::now(device.clone()).boxed();
 
     let (dummy_texture_image, dummy_texture_sampler, dummy_texture_future) =
         create_dummy_texture(device.clone(), queue.clone())
             .context("Failed to create dummy texture")?;
-    previous_frame = Box::new(previous_frame.join(dummy_texture_future));
+    previous_frame = previous_frame.join(dummy_texture_future).boxed();
 
     let scene = fbx::load(&opt.fbx_path).context("Failed to interpret FBX scene")?;
     let (mut drawable_scene, drawable_scene_future) =
@@ -96,14 +96,13 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
         .ok_or_else(|| anyhow!("No data to show (bounding box is `None`)"))?;
     info!("Scene bounding box = {:?}", scene_bbox);
     if let Some(future) = drawable_scene_future {
-        previous_frame = Box::new(previous_frame.join(future));
+        previous_frame = previous_frame.join(future).boxed();
     }
-    previous_frame = Box::new(
-        drawable_scene
-            .reset_cache_with_pipeline(&pipeline)?
-            .unwrap_or_else(|| Box::new(vulkano::sync::now(device.clone())))
-            .join(previous_frame),
-    );
+    previous_frame = drawable_scene
+        .reset_cache_with_pipeline(&pipeline)?
+        .unwrap_or_else(|| vulkano::sync::now(device.clone()).boxed())
+        .join(previous_frame)
+        .boxed();
     let mut dummy_texture_desc_set = create_diffuse_texture_desc_set(
         dummy_texture_image.clone(),
         dummy_texture_sampler.clone(),
@@ -178,7 +177,7 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                         drawable_scene
                             .reset_cache_with_pipeline(&pipeline)
                             .expect("Failed to reset scene cash")
-                            .unwrap_or_else(|| Box::new(vulkano::sync::now(device.clone()))),
+                            .unwrap_or_else(|| vulkano::sync::now(device.clone()).boxed()),
                     );
 
                     trace!("Swapchain recreation done");
@@ -346,17 +345,15 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                     .then_signal_fence_and_flush();
                 match future {
                     Ok(future) => {
-                        previous_frame = Some(Box::new(future) as Box<_>);
+                        previous_frame = Some(future.boxed());
                     }
                     Err(vulkano::sync::FlushError::OutOfDate) => {
                         recreate_swapchain = true;
-                        previous_frame =
-                            Some(Box::new(vulkano::sync::now(device.clone())) as Box<_>);
+                        previous_frame = Some(vulkano::sync::now(device.clone()).boxed());
                     }
                     Err(e) => {
                         error!("{}", e);
-                        previous_frame =
-                            Some(Box::new(vulkano::sync::now(device.clone())) as Box<_>);
+                        previous_frame = Some(vulkano::sync::now(device.clone()).boxed());
                     }
                 }
             }
