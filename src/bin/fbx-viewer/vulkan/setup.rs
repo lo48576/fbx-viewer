@@ -5,22 +5,30 @@ use std::sync::Arc;
 use anyhow::{anyhow, Context};
 use log::{debug, info};
 use vulkano::{
-    descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet},
+    descriptor::{
+        descriptor_set::{DescriptorSet, PersistentDescriptorSet},
+        pipeline_layout::PipelineLayoutAbstract,
+    },
     device::{Device, DeviceExtensions, Queue},
     format::R8G8B8A8Srgb,
-    image::{Dimensions, ImmutableImage, SwapchainImage},
+    image::{Dimensions, ImmutableImage, MipmapsCount, SwapchainImage},
     instance::{Instance, PhysicalDevice},
-    pipeline::GraphicsPipelineAbstract,
+    pipeline::GraphicsPipeline,
     sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
-    swapchain::{PresentMode, Surface, SurfaceTransform, Swapchain},
+    swapchain::{
+        ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform, Swapchain,
+    },
     sync::GpuFuture,
 };
 use vulkano_win::{self, VkSurfaceBuild};
-use winit::{EventsLoop, Window, WindowBuilder};
+use winit::{
+    event_loop::EventLoop,
+    window::{Window, WindowBuilder},
+};
 
 /// Initialize vulkan.
 #[allow(clippy::type_complexity)]
-pub fn setup() -> anyhow::Result<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>, EventsLoop)> {
+pub fn setup() -> anyhow::Result<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>, EventLoop<()>)> {
     // Create an instance of vulkan.
     let instance = {
         let extensions = vulkano_win::required_extensions();
@@ -40,9 +48,9 @@ pub fn setup() -> anyhow::Result<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>,
     }
 
     // Prepare a window.
-    let events_loop = EventsLoop::new();
+    let event_loop = EventLoop::new();
     let surface = WindowBuilder::new()
-        .build_vk_surface(&events_loop, instance.clone())
+        .build_vk_surface(&event_loop, instance.clone())
         .context("Failed to create window surface")?;
 
     // Select a physical device.
@@ -101,7 +109,7 @@ pub fn setup() -> anyhow::Result<(Arc<Device>, Arc<Queue>, Arc<Surface<Window>>,
     };
     info!("Successfully created device object");
 
-    Ok((device, queue, surface, events_loop))
+    Ok((device, queue, surface, event_loop))
 }
 
 /// Create swapchain.
@@ -126,28 +134,21 @@ pub fn create_swapchain(
     info!("Selected swapchain format: {:?}", format);
 
     let window = surface.window();
-    let initial_dimensions = window
-        .get_inner_size()
-        .map(|dimensions| {
-            // Convert to physical pixels
-            let dimensions: (u32, u32) = dimensions.to_physical(window.get_hidpi_factor()).into();
-            [dimensions.0, dimensions.1]
-        })
-        .ok_or_else(|| anyhow!("The window no longer exists"))?;
     let (swapchain, image) = Swapchain::new(
         device.clone(),
         surface.clone(),
         caps.min_image_count,
         format,
-        initial_dimensions,
+        window.inner_size().into(),
         1,
         usage,
         queue,
         SurfaceTransform::Identity,
         alpha,
         PresentMode::Fifo,
+        FullscreenExclusive::Default,
         true,
-        None,
+        ColorSpace::SrgbNonLinear,
     )
     .context("Failed to create swapchain")?;
     Ok((swapchain, image))
@@ -168,9 +169,14 @@ pub fn create_dummy_texture(
         width: 1,
         height: 1,
     };
-    let (image, img_future) =
-        ImmutableImage::from_iter(raw_image.iter().cloned(), dim, R8G8B8A8Srgb, queue)
-            .context("Failed to upload dummy texture image")?;
+    let (image, img_future) = ImmutableImage::from_iter(
+        raw_image.iter().cloned(),
+        dim,
+        MipmapsCount::One,
+        R8G8B8A8Srgb,
+        queue,
+    )
+    .context("Failed to upload dummy texture image")?;
     let sampler = Sampler::new(
         device,
         Filter::Linear,
@@ -190,12 +196,19 @@ pub fn create_dummy_texture(
 }
 
 /// Creates a descriptor set for the given diffuse texture.
-pub fn create_diffuse_texture_desc_set(
+pub fn create_diffuse_texture_desc_set<Mv, L, Rp>(
     image: Arc<ImmutableImage<R8G8B8A8Srgb>>,
     sampler: Arc<Sampler>,
-    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-) -> anyhow::Result<Arc<dyn DescriptorSet + Send + Sync>> {
-    let desc_set = PersistentDescriptorSet::start(pipeline, 1)
+    pipeline: Arc<GraphicsPipeline<Mv, L, Rp>>,
+) -> anyhow::Result<Arc<dyn DescriptorSet + Send + Sync>>
+where
+    L: PipelineLayoutAbstract,
+{
+    let layout = pipeline
+        .layout()
+        .descriptor_set_layout(1)
+        .context("Failed to get the second descriptor set layout of the pipeline")?;
+    let desc_set = PersistentDescriptorSet::start(layout.clone())
         .add_sampled_image(image, sampler)
         .context("Failed to add sampled image to descriptor set")?
         .build()

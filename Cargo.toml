@@ -15,17 +15,17 @@ all-features = true
 
 [dependencies]
 anyhow = "1"
-cgmath = { version = "0.17", features = ["mint"] }
-env_logger = "0.7"
-fbxcel-dom = "0.0.5"
-image = "0.23"
+cgmath = { version = "0.18.0", features = ["mint"] }
+env_logger = "0.8.2"
+fbxcel-dom = "0.0.6"
+image = "0.23.12"
 log = "0.4"
 rgb = "0.8"
 structopt = "0.3"
-vulkano = "0.16"
-vulkano-shaders = "0.16"
-vulkano-win = "0.16"
-winit = "0.19"
+vulkano = "0.20.0"
+vulkano-shaders = "0.20.0"
+vulkano-win = "0.20.0"
+winit = "0.24.0"
 
 [badges]
 maintenance = { status = "experimental" }
