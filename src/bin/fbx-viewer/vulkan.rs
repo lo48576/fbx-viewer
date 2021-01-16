@@ -10,7 +10,7 @@ use fbx_viewer::{fbx, CliOpt};
 use log::{debug, error, info, trace};
 use vulkano::{
     buffer::{BufferUsage, CpuBufferPool},
-    command_buffer::{AutoCommandBufferBuilder, DynamicState},
+    command_buffer::{AutoCommandBufferBuilder, DynamicState, SubpassContents},
     descriptor::{
         descriptor_set::{DescriptorSet, PersistentDescriptorSet},
         pipeline_layout::PipelineLayoutAbstract,
@@ -248,7 +248,7 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                     builder
                         .begin_render_pass(
                             framebuffers[image_num].clone(),
-                            false,
+                            SubpassContents::Inline,
                             vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()],
                         )
                         .expect("Failed to begin new render pass creation");

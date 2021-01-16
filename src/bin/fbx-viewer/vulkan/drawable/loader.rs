@@ -8,7 +8,7 @@ use vulkano::{
     buffer::{BufferUsage, ImmutableBuffer},
     device::{Device, Queue},
     format::R8G8B8A8Srgb,
-    image::{Dimensions, ImmutableImage},
+    image::{Dimensions, ImmutableImage, MipmapsCount},
     sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
     sync::GpuFuture,
 };
@@ -130,6 +130,7 @@ impl Loader {
             let (image, image_future) = ImmutableImage::from_iter(
                 src_texture.image.to_rgba8().into_raw().into_iter(),
                 dim,
+                MipmapsCount::One,
                 R8G8B8A8Srgb,
                 self.queue.clone(),
             )

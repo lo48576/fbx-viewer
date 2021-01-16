@@ -11,7 +11,7 @@ use vulkano::{
     },
     device::{Device, DeviceExtensions, Queue},
     format::R8G8B8A8Srgb,
-    image::{Dimensions, ImmutableImage, SwapchainImage},
+    image::{Dimensions, ImmutableImage, MipmapsCount, SwapchainImage},
     instance::{Instance, PhysicalDevice},
     pipeline::GraphicsPipeline,
     sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
@@ -169,9 +169,14 @@ pub fn create_dummy_texture(
         width: 1,
         height: 1,
     };
-    let (image, img_future) =
-        ImmutableImage::from_iter(raw_image.iter().cloned(), dim, R8G8B8A8Srgb, queue)
-            .context("Failed to upload dummy texture image")?;
+    let (image, img_future) = ImmutableImage::from_iter(
+        raw_image.iter().cloned(),
+        dim,
+        MipmapsCount::One,
+        R8G8B8A8Srgb,
+        queue,
+    )
+    .context("Failed to upload dummy texture image")?;
     let sampler = Sampler::new(
         device,
         Filter::Linear,
