@@ -243,13 +243,15 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                         device.clone(),
                         queue.family(),
                     )
-                    .expect("Failed to create command buffer builder")
-                    .begin_render_pass(
-                        framebuffers[image_num].clone(),
-                        false,
-                        vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()],
-                    )
-                    .expect("Failed to begin new render pass creation");
+                    .expect("Failed to create command buffer builder");
+
+                    builder
+                        .begin_render_pass(
+                            framebuffers[image_num].clone(),
+                            false,
+                            vec![[0.0, 0.0, 1.0, 1.0].into(), 1f32.into()],
+                        )
+                        .expect("Failed to begin new render pass creation");
 
                     // TODO: Draw scene here.
                     let mut opaque_meshes = Vec::new();
@@ -311,7 +313,7 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                     for (vertex, index, material, texture_desc_set) in
                         opaque_meshes.into_iter().chain(transparent_meshes)
                     {
-                        builder = builder
+                        builder
                             .draw_indexed(
                                 pipeline.clone(),
                                 &DynamicState::none(),
@@ -325,7 +327,9 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
 
                     builder
                         .end_render_pass()
-                        .expect("Failed to end a render pass creation")
+                        .expect("Failed to end a render pass creation");
+
+                    builder
                         .build()
                         .expect("Failed to build a new command buffer")
                 };
