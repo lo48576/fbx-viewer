@@ -124,6 +124,8 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
         .flush()
         .context("Failed to prepare resources")?;
 
+    let mut kbd_modifiers = winit::event::ModifiersState::default();
+
     // Use `Option<_>`, since `GpuFuture::then_signal_fence_and_flush()` takes the ownership of the
     // future (`self`) and `previous_frame` would be temporarily empty.
     let mut previous_frame: Option<Box<dyn GpuFuture>> = Some(previous_frame);
@@ -365,6 +367,10 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                 event: WindowEvent::Resized(_),
                 ..
             } => recreate_swapchain = true,
+            Event::WindowEvent {
+                event: WindowEvent::ModifiersChanged(modifiers),
+                ..
+            } => kbd_modifiers = modifiers,
             Event::DeviceEvent { event, .. } => match event {
                 DeviceEvent::Key(input) => {
                     const FORWARD: ScanCode = 17;
@@ -383,12 +389,11 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                         KeyboardInput {
                             scancode: FORWARD,
                             state: ElementState::Pressed,
-                            modifiers,
                             ..
                         } => {
-                            if modifiers.shift() {
+                            if kbd_modifiers.shift() {
                                 camera.move_rel(Camera::up() * move_delta);
-                            } else if modifiers.ctrl() {
+                            } else if kbd_modifiers.ctrl() {
                                 camera.rotate_up(ANGLE_DELTA);
                             } else {
                                 camera.move_rel(Camera::forward() * move_delta);
@@ -397,12 +402,11 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                         KeyboardInput {
                             scancode: BACK,
                             state: ElementState::Pressed,
-                            modifiers,
                             ..
                         } => {
-                            if modifiers.shift() {
+                            if kbd_modifiers.shift() {
                                 camera.move_rel(Camera::up() * -move_delta);
-                            } else if modifiers.ctrl() {
+                            } else if kbd_modifiers.ctrl() {
                                 camera.rotate_up(-ANGLE_DELTA);
                             } else {
                                 camera.move_rel(Camera::forward() * -move_delta);
@@ -411,10 +415,9 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                         KeyboardInput {
                             scancode: LEFT,
                             state: ElementState::Pressed,
-                            modifiers,
                             ..
                         } => {
-                            if modifiers.ctrl() {
+                            if kbd_modifiers.ctrl() {
                                 camera.rotate_right(-ANGLE_DELTA);
                             } else {
                                 camera.move_rel(Camera::right() * -move_delta);
@@ -423,10 +426,9 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                         KeyboardInput {
                             scancode: RIGHT,
                             state: ElementState::Pressed,
-                            modifiers,
                             ..
                         } => {
-                            if modifiers.ctrl() {
+                            if kbd_modifiers.ctrl() {
                                 camera.rotate_right(ANGLE_DELTA);
                             } else {
                                 camera.move_rel(Camera::right() * move_delta);
@@ -435,10 +437,9 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                         KeyboardInput {
                             scancode: ZERO,
                             state: ElementState::Pressed,
-                            modifiers,
                             ..
                         } => {
-                            if modifiers.ctrl() {
+                            if kbd_modifiers.ctrl() {
                                 camera.yaw = initial_camera.yaw;
                                 camera.pitch = initial_camera.pitch;
                                 trace!("Reset camera posture: camera = {:?}", camera);
