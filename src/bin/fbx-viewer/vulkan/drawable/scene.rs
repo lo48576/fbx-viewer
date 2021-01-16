@@ -9,8 +9,11 @@ use fbx_viewer::{
 };
 use vulkano::{
     buffer::ImmutableBuffer,
-    descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet},
-    pipeline::GraphicsPipelineAbstract,
+    descriptor::{
+        descriptor_set::{PersistentDescriptorSet, PersistentDescriptorSetBuf},
+        pipeline_layout::PipelineLayoutAbstract,
+    },
+    pipeline::GraphicsPipeline,
     sync::GpuFuture,
 };
 
@@ -60,10 +63,13 @@ impl Scene {
     }
 
     /// Reset and initialize caches with the given pipeline.
-    pub fn reset_cache_with_pipeline(
+    pub fn reset_cache_with_pipeline<Mv, L, Rp>(
         &mut self,
-        pipeline: &Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-    ) -> anyhow::Result<Option<Box<dyn GpuFuture>>> {
+        pipeline: &Arc<GraphicsPipeline<Mv, L, Rp>>,
+    ) -> anyhow::Result<Option<Box<dyn GpuFuture>>>
+    where
+        L: PipelineLayoutAbstract,
+    {
         let future = None;
 
         for material in &mut self.materials {
@@ -88,11 +94,25 @@ impl Scene {
 }
 
 /// Creates a descriptor set for the given material uniform buffer.
-fn create_material_desc_set(
+fn create_material_desc_set<Mv, L, Rp>(
     material_buf: Arc<ImmutableBuffer<ShaderMaterial>>,
-    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-) -> anyhow::Result<Arc<dyn DescriptorSet + Send + Sync>> {
-    let desc_set = PersistentDescriptorSet::start(pipeline.clone(), 2)
+    pipeline: Arc<GraphicsPipeline<Mv, L, Rp>>,
+) -> anyhow::Result<
+    Arc<
+        PersistentDescriptorSet<(
+            (),
+            PersistentDescriptorSetBuf<Arc<ImmutableBuffer<ShaderMaterial>>>,
+        )>,
+    >,
+>
+where
+    L: PipelineLayoutAbstract,
+{
+    let layout = pipeline
+        .layout()
+        .descriptor_set_layout(2)
+        .context("Failed to get the second descriptor set layout of the pipeline")?;
+    let desc_set = PersistentDescriptorSet::start(layout.clone())
         .add_buffer(material_buf)
         .context("Failed to add material data to descriptor set")?
         .build()
