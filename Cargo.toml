@@ -28,5 +28,5 @@ vulkano-win = "0.20.0"
 winit = "0.24.0"
 
 [badges]
-maintenance = { status = "experimental" }
+maintenance = { status = "deprecated" }
 travis-ci = { repository = "lo48576/fbx-viewer" }

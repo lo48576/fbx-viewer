@@ -2,6 +2,10 @@
 
 [![Build Status](https://travis-ci.org/lo48576/fbx-viewer.svg?branch=develop)](https://travis-ci.org/lo48576/fbx-viewer)
 
+## DEPRECATION NOTICE
+
+**This demo application is no longer maintained, so you should be very careful
+if you wanted to run this.**
 
 ## Screenshots
 
