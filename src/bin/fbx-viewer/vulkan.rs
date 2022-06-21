@@ -18,7 +18,7 @@ use vulkano::{
     device::Device,
     format::Format,
     framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass},
-    image::{AttachmentImage, SwapchainImage},
+    image::{view::ImageView, AttachmentImage, SwapchainImage},
     pipeline::{vertex::SingleBufferDefinition, viewport::Viewport, GraphicsPipeline},
     swapchain::{AcquireError, SwapchainCreationError},
     sync::GpuFuture,
@@ -83,6 +83,8 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
         create_dummy_texture(device.clone(), queue.clone())
             .context("Failed to create dummy texture")?;
     previous_frame = previous_frame.join(dummy_texture_future).boxed();
+    let dummy_texture_image = ImageView::new(dummy_texture_image)
+        .context("Failed to create image view for dummy texture")?;
 
     let scene = fbx::load(&opt.fbx_path).context("Failed to interpret FBX scene")?;
     let (mut drawable_scene, drawable_scene_future) =
@@ -336,6 +338,7 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                         .expect("Failed to build a new command buffer")
                 };
 
+                // FIXME: `.expect("Failed to execute command buffer")` fails here.
                 let future = previous_frame
                     .take()
                     .expect(
@@ -484,6 +487,9 @@ fn window_size_dependent_setup(
     let framebuffers = images
         .iter()
         .map(|image| {
+            let image = ImageView::new(image.clone()).context("failed to create image view")?;
+            let depth_buffer = ImageView::new(depth_buffer.clone())
+                .context("failed to create image view for depth buffer")?;
             Framebuffer::start(render_pass.clone())
                 .add(image.clone())
                 .context("Failed to add a swapchain image to framebuffer")?

@@ -3,7 +3,9 @@
 use std::{fmt, sync::Arc};
 
 use vulkano::{
-    descriptor::descriptor_set::DescriptorSet, format::R8G8B8A8Srgb, image::ImmutableImage,
+    descriptor::descriptor_set::DescriptorSet,
+    format::R8G8B8A8Srgb,
+    image::{view::ImageView, ImmutableImage},
     sampler::Sampler,
 };
 
@@ -13,7 +15,7 @@ pub struct Texture {
     /// Name.
     pub(crate) name: Option<String>,
     /// Image.
-    pub(crate) image: Arc<ImmutableImage<R8G8B8A8Srgb>>,
+    pub(crate) image: Arc<ImageView<Arc<ImmutableImage<R8G8B8A8Srgb>>>>,
     /// Sampler.
     pub(crate) sampler: Arc<Sampler>,
     /// Whether the texture can be transparent.
@@ -29,7 +31,7 @@ impl fmt::Debug for Texture {
         f.debug_struct("Texture")
             .field("name", &self.name)
             .field("transparent", &self.transparent)
-            .field("image", &self.image)
+            .field("image", self.image.image())
             .field("sampler", &self.sampler)
             .finish()
     }
