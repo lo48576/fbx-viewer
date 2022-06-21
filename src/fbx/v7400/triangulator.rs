@@ -130,7 +130,10 @@ pub fn triangulator(
                 }
                 Ok(())
             } else {
-                bail!("Unsupported polygon: {}-gon with two or more concave angles");
+                bail!(
+                    "Unsupported polygon: {}-gon with two or more concave angles",
+                    n
+                );
             }
         }
     }
