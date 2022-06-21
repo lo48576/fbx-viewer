@@ -322,6 +322,7 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                                 index,
                                 (set0.clone(), texture_desc_set.clone(), material.clone()),
                                 (),
+                                std::iter::empty(),
                             )
                             .expect("Failed to add a draw call to command buffer");
                     }
