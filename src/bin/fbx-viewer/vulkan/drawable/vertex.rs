@@ -1,6 +1,6 @@
 //! Vertex.
-// Allow `clippy::ref_in_deref` for `vulkano::impl_vertex` macro.
-#![allow(clippy::ref_in_deref)]
+// Allow `clippy::needless_borrow` for `vulkano::impl_vertex` macro.
+#![allow(clippy::needless_borrow)]
 
 /// Vertex.
 #[derive(Default, Debug, Clone, Copy)]

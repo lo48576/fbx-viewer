@@ -97,6 +97,7 @@ impl Scene {
     }
 }
 
+/// Defines independent index types for resource types.
 macro_rules! define_index_type {
     ($(
         $(#[$meta:meta])*

@@ -12,6 +12,7 @@ pub fn triangulator(
     poly_pvis: &[PolygonVertexIndex],
     results: &mut Vec<[PolygonVertexIndex; 3]>,
 ) -> anyhow::Result<()> {
+    /// Returns the vector by PVI indices.
     macro_rules! get_vec {
         ($pvii:expr) => {
             get_vec(pvs, poly_pvis[$pvii])

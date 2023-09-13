@@ -23,10 +23,10 @@ pub struct Texture {
 
 impl fmt::Debug for Texture {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use image::GenericImageView;
-
         /// Image info.
         #[derive(Debug)]
+        // False positive. This type exists only for `Debug`.
+        #[allow(dead_code)]
         struct ImageInfo {
             /// Width.
             width: u32,
