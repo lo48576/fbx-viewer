@@ -2,12 +2,11 @@
 
 use std::path::PathBuf;
 
-use structopt::StructOpt;
+use clap::Parser;
 
 /// CLI options.
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 pub struct CliOpt {
     /// FBX file
-    #[structopt(parse(from_os_str))]
     pub fbx_path: PathBuf,
 }
