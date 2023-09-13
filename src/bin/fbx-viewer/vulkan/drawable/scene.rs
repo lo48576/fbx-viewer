@@ -27,6 +27,7 @@ use crate::vulkan::{
 #[derive(Default, Debug, Clone)]
 pub struct Scene {
     /// Name.
+    #[allow(dead_code)]
     pub(crate) name: Option<String>,
     /// Geometry mesh.
     pub(crate) geometry_meshes: Vec<GeometryMesh>,
@@ -94,6 +95,7 @@ impl Scene {
 }
 
 /// Creates a descriptor set for the given material uniform buffer.
+#[allow(clippy::type_complexity)]
 fn create_material_desc_set<Mv, L, Rp>(
     material_buf: Arc<ImmutableBuffer<ShaderMaterial>>,
     pipeline: Arc<GraphicsPipeline<Mv, L, Rp>>,

@@ -84,7 +84,7 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
             .context("Failed to create dummy texture")?;
     previous_frame = previous_frame.join(dummy_texture_future).boxed();
 
-    let scene = fbx::load(&opt.fbx_path).context("Failed to interpret FBX scene")?;
+    let scene = fbx::load(opt.fbx_path).context("Failed to interpret FBX scene")?;
     let (mut drawable_scene, drawable_scene_future) =
         drawable::Loader::new(device.clone(), queue.clone())
             .load(&scene)
@@ -322,6 +322,7 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                                 index,
                                 (set0.clone(), texture_desc_set.clone(), material.clone()),
                                 (),
+                                std::iter::empty(),
                             )
                             .expect("Failed to add a draw call to command buffer");
                     }
@@ -371,88 +372,88 @@ pub fn main(opt: CliOpt) -> anyhow::Result<()> {
                 event: WindowEvent::ModifiersChanged(modifiers),
                 ..
             } => kbd_modifiers = modifiers,
-            Event::DeviceEvent { event, .. } => match event {
-                DeviceEvent::Key(input) => {
-                    const FORWARD: ScanCode = 17;
-                    const BACK: ScanCode = 31;
-                    const LEFT: ScanCode = 30;
-                    const RIGHT: ScanCode = 32;
-                    const ZERO: ScanCode = 11;
-                    let move_delta = {
-                        let bbox_size = scene_bbox.size();
-                        let min_div_32 = bbox_size[0].min(bbox_size[1]).min(bbox_size[2]) / 32.0;
-                        let max_div_128 = bbox_size[0].max(bbox_size[1]).max(bbox_size[2]) / 128.0;
-                        f64::from(min_div_32.max(max_div_128))
-                    };
-                    const ANGLE_DELTA: Rad<f64> = Rad(std::f64::consts::FRAC_PI_2 / 16.0);
-                    match input {
-                        KeyboardInput {
-                            scancode: FORWARD,
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            if kbd_modifiers.shift() {
-                                camera.move_rel(Camera::up() * move_delta);
-                            } else if kbd_modifiers.ctrl() {
-                                camera.rotate_up(ANGLE_DELTA);
-                            } else {
-                                camera.move_rel(Camera::forward() * move_delta);
-                            }
+            Event::DeviceEvent {
+                event: DeviceEvent::Key(input),
+                ..
+            } => {
+                const FORWARD: ScanCode = 17;
+                const BACK: ScanCode = 31;
+                const LEFT: ScanCode = 30;
+                const RIGHT: ScanCode = 32;
+                const ZERO: ScanCode = 11;
+                let move_delta = {
+                    let bbox_size = scene_bbox.size();
+                    let min_div_32 = bbox_size[0].min(bbox_size[1]).min(bbox_size[2]) / 32.0;
+                    let max_div_128 = bbox_size[0].max(bbox_size[1]).max(bbox_size[2]) / 128.0;
+                    f64::from(min_div_32.max(max_div_128))
+                };
+                const ANGLE_DELTA: Rad<f64> = Rad(std::f64::consts::FRAC_PI_2 / 16.0);
+                match input {
+                    KeyboardInput {
+                        scancode: FORWARD,
+                        state: ElementState::Pressed,
+                        ..
+                    } => {
+                        if kbd_modifiers.shift() {
+                            camera.move_rel(Camera::up() * move_delta);
+                        } else if kbd_modifiers.ctrl() {
+                            camera.rotate_up(ANGLE_DELTA);
+                        } else {
+                            camera.move_rel(Camera::forward() * move_delta);
                         }
-                        KeyboardInput {
-                            scancode: BACK,
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            if kbd_modifiers.shift() {
-                                camera.move_rel(Camera::up() * -move_delta);
-                            } else if kbd_modifiers.ctrl() {
-                                camera.rotate_up(-ANGLE_DELTA);
-                            } else {
-                                camera.move_rel(Camera::forward() * -move_delta);
-                            }
-                        }
-                        KeyboardInput {
-                            scancode: LEFT,
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            if kbd_modifiers.ctrl() {
-                                camera.rotate_right(-ANGLE_DELTA);
-                            } else {
-                                camera.move_rel(Camera::right() * -move_delta);
-                            }
-                        }
-                        KeyboardInput {
-                            scancode: RIGHT,
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            if kbd_modifiers.ctrl() {
-                                camera.rotate_right(ANGLE_DELTA);
-                            } else {
-                                camera.move_rel(Camera::right() * move_delta);
-                            }
-                        }
-                        KeyboardInput {
-                            scancode: ZERO,
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            if kbd_modifiers.ctrl() {
-                                camera.yaw = initial_camera.yaw;
-                                camera.pitch = initial_camera.pitch;
-                                trace!("Reset camera posture: camera = {:?}", camera);
-                            } else {
-                                camera.position = initial_camera.position;
-                                trace!("Reset camera position: camera = {:?}", camera);
-                            }
-                        }
-                        _ => {}
                     }
+                    KeyboardInput {
+                        scancode: BACK,
+                        state: ElementState::Pressed,
+                        ..
+                    } => {
+                        if kbd_modifiers.shift() {
+                            camera.move_rel(Camera::up() * -move_delta);
+                        } else if kbd_modifiers.ctrl() {
+                            camera.rotate_up(-ANGLE_DELTA);
+                        } else {
+                            camera.move_rel(Camera::forward() * -move_delta);
+                        }
+                    }
+                    KeyboardInput {
+                        scancode: LEFT,
+                        state: ElementState::Pressed,
+                        ..
+                    } => {
+                        if kbd_modifiers.ctrl() {
+                            camera.rotate_right(-ANGLE_DELTA);
+                        } else {
+                            camera.move_rel(Camera::right() * -move_delta);
+                        }
+                    }
+                    KeyboardInput {
+                        scancode: RIGHT,
+                        state: ElementState::Pressed,
+                        ..
+                    } => {
+                        if kbd_modifiers.ctrl() {
+                            camera.rotate_right(ANGLE_DELTA);
+                        } else {
+                            camera.move_rel(Camera::right() * move_delta);
+                        }
+                    }
+                    KeyboardInput {
+                        scancode: ZERO,
+                        state: ElementState::Pressed,
+                        ..
+                    } => {
+                        if kbd_modifiers.ctrl() {
+                            camera.yaw = initial_camera.yaw;
+                            camera.pitch = initial_camera.pitch;
+                            trace!("Reset camera posture: camera = {:?}", camera);
+                        } else {
+                            camera.position = initial_camera.position;
+                            trace!("Reset camera position: camera = {:?}", camera);
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
+            }
             _ => {}
         }
     });

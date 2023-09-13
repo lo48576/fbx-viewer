@@ -121,8 +121,6 @@ impl Loader {
         }
 
         for src_texture in src_scene.textures() {
-            use image::GenericImageView;
-
             let dim = Dimensions::Dim2d {
                 width: src_texture.image.width(),
                 height: src_texture.image.height(),

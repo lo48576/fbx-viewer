@@ -16,15 +16,15 @@ all-features = true
 [dependencies]
 anyhow = "1"
 cgmath = { version = "0.18.0", features = ["mint"] }
+clap = { version = "4.4.3", features = ["derive"] }
 env_logger = "0.10.0"
 fbxcel-dom = "0.0.10"
 image = "0.24.2"
 log = "0.4"
 rgb = "0.8"
-structopt = "0.3"
-vulkano = "0.20.0"
-vulkano-shaders = "0.20.0"
-vulkano-win = "0.20.0"
+vulkano = "0.21.0"
+vulkano-shaders = "0.21.0"
+vulkano-win = "0.21.0"
 winit = "0.24.0"
 
 [badges]
