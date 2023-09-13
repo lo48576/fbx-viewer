@@ -8,7 +8,7 @@ use vulkano::{
     buffer::{BufferUsage, ImmutableBuffer},
     device::{Device, Queue},
     format::R8G8B8A8Srgb,
-    image::{Dimensions, ImmutableImage, MipmapsCount},
+    image::{view::ImageView, ImageDimensions, ImmutableImage, MipmapsCount},
     sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
     sync::GpuFuture,
 };
@@ -121,9 +121,10 @@ impl Loader {
         }
 
         for src_texture in src_scene.textures() {
-            let dim = Dimensions::Dim2d {
+            let dim = ImageDimensions::Dim2d {
                 width: src_texture.image.width(),
                 height: src_texture.image.height(),
+                array_layers: 1,
             };
             let (image, image_future) = ImmutableImage::from_iter(
                 src_texture.image.to_rgba8().into_raw().into_iter(),
@@ -133,6 +134,7 @@ impl Loader {
                 self.queue.clone(),
             )
             .context("Failed to upload texture image")?;
+            let image = ImageView::new(image).context("Failed to create image view")?;
             join_futures(&mut self.future, image_future);
             let wrap_mode_u = match src_texture.wrap_mode_u {
                 data::WrapMode::Repeat => SamplerAddressMode::Repeat,

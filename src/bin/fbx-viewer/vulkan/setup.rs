@@ -11,7 +11,7 @@ use vulkano::{
     },
     device::{Device, DeviceExtensions, Queue},
     format::R8G8B8A8Srgb,
-    image::{Dimensions, ImmutableImage, MipmapsCount, SwapchainImage},
+    image::{view::ImageView, ImageDimensions, ImmutableImage, MipmapsCount, SwapchainImage},
     instance::{Instance, PhysicalDevice},
     pipeline::GraphicsPipeline,
     sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
@@ -160,14 +160,15 @@ pub fn create_dummy_texture(
     device: Arc<Device>,
     queue: Arc<Queue>,
 ) -> anyhow::Result<(
-    Arc<ImmutableImage<R8G8B8A8Srgb>>,
+    Arc<ImageView<Arc<ImmutableImage<R8G8B8A8Srgb>>>>,
     Arc<Sampler>,
     Box<dyn GpuFuture>,
 )> {
     let raw_image = [0xffu8; 4];
-    let dim = Dimensions::Dim2d {
+    let dim = ImageDimensions::Dim2d {
         width: 1,
         height: 1,
+        array_layers: 1,
     };
     let (image, img_future) = ImmutableImage::from_iter(
         raw_image.iter().cloned(),
@@ -177,6 +178,7 @@ pub fn create_dummy_texture(
         queue,
     )
     .context("Failed to upload dummy texture image")?;
+    let image = ImageView::new(image).context("Failed to create image view")?;
     let sampler = Sampler::new(
         device,
         Filter::Linear,
@@ -197,7 +199,7 @@ pub fn create_dummy_texture(
 
 /// Creates a descriptor set for the given diffuse texture.
 pub fn create_diffuse_texture_desc_set<Mv, L, Rp>(
-    image: Arc<ImmutableImage<R8G8B8A8Srgb>>,
+    image: Arc<ImageView<Arc<ImmutableImage<R8G8B8A8Srgb>>>>,
     sampler: Arc<Sampler>,
     pipeline: Arc<GraphicsPipeline<Mv, L, Rp>>,
 ) -> anyhow::Result<Arc<dyn DescriptorSet + Send + Sync>>

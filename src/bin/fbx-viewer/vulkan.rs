@@ -18,7 +18,7 @@ use vulkano::{
     device::Device,
     format::Format,
     framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass},
-    image::{AttachmentImage, SwapchainImage},
+    image::{view::ImageView, AttachmentImage, SwapchainImage},
     pipeline::{vertex::SingleBufferDefinition, viewport::Viewport, GraphicsPipeline},
     swapchain::{AcquireError, SwapchainCreationError},
     sync::GpuFuture,
@@ -480,14 +480,18 @@ fn window_size_dependent_setup(
     let dimensions = images[0].dimensions();
     let depth_buffer = AttachmentImage::transient(device.clone(), dimensions, DEPTH_FORMAT)
         .context("Failed to create depth buffer")?;
+    let depth_buffer_view =
+        ImageView::new(depth_buffer).context("Failed to create depth buffer view")?;
 
     let framebuffers = images
         .iter()
         .map(|image| {
+            let image_view =
+                ImageView::new(image.clone()).context("Failed to create image view")?;
             Framebuffer::start(render_pass.clone())
-                .add(image.clone())
+                .add(image_view)
                 .context("Failed to add a swapchain image to framebuffer")?
-                .add(depth_buffer.clone())
+                .add(depth_buffer_view.clone())
                 .context("Failed to add a depth buffer to framebuffer")?
                 .build()
                 .map(|fb| Arc::new(fb) as Arc<dyn FramebufferAbstract + Send + Sync>)

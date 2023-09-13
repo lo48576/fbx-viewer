@@ -404,20 +404,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2801af0d36612ae591caa9568261fddce32ce6e08a7275ea334a06a4ad021a2c"
-dependencies = [
- "cfg-if 1.0.0",
- "crossbeam-channel",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
-]
-
-[[package]]
 name = "crossbeam-channel"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1760,11 +1746,11 @@ checksum = "13cf8378b55e764a88f110b1e3923cb3360fb1efdeaf51fb733934419682dd73"
 
 [[package]]
 name = "vulkano"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "297ab08f5a8a03c638641abccf12736ba5591082f2c59458a518948dfb4172ac"
+checksum = "7b34b537d0050076f22526f6aab0ee53b1aae135d9d13ac5acd9cf3d916940c7"
 dependencies = [
- "crossbeam",
+ "crossbeam-queue",
  "fnv",
  "half 1.8.2",
  "lazy_static",
@@ -1776,9 +1762,9 @@ dependencies = [
 
 [[package]]
 name = "vulkano-shaders"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e99eb70f9cf000f3596b47e35c7e552839ec213a865d01f3f513c742b73948f1"
+checksum = "76800854ca8014e9758473de4e85a364d469b5ab6f8e59a2d753ce0f3f6588b4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1788,9 +1774,9 @@ dependencies = [
 
 [[package]]
 name = "vulkano-win"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8acdaa3c8b810ad1140e853874c677c9c478e2ee101f8a5162d0cc9e40786ad5"
+checksum = "d7a193b77f1c4127f64042ac5d77f2a8b8e236fb9e42a32ece8b33b22eb4715e"
 dependencies = [
  "cocoa 0.20.2",
  "metal",
